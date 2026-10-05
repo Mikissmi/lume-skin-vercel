@@ -41,9 +41,7 @@ ALLOWED_HOSTS = [
 ]
 
 # necessario pros formularios (login, cadastro...) funcionarem em HTTPS no Vercel
-CSRF_TRUSTED_ORIGINS = [
-    "https://*.vercel.app",
-]
+CSRF_TRUSTED_ORIGINS = ["https://*.vercel.app"]
 
 
 # Application definition
@@ -113,19 +111,20 @@ YOUCAM_API_KEY = os.getenv('YOUCAM_API_KEY', '')
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.mysql',
+        'ENGINE': 'django.db.backends.postgresql',
         'NAME': os.getenv('DB_NAME', ''),
         'USER': os.getenv('DB_USER', ''),
         'PASSWORD': os.getenv('DB_PASSWORD', ''),
         'HOST': os.getenv('DB_HOST', ''),
         'PORT': os.getenv('DB_PORT', ''),
+        'OPTIONS': {'sslmode': 'require'},
     }
 }
 
 # bancos MySQL na nuvem (Aiven, TiDB Cloud, etc.) costumam exigir SSL.
 # coloque DB_SSL=true nas variaveis de ambiente pra ativar.
-if os.getenv('DB_SSL', '').lower() in ('1', 'true', 'yes'):
-    DATABASES['default']['OPTIONS'] = {'ssl': {'check_hostname': False}}
+# if os.getenv('DB_SSL', '').lower() in ('1', 'true', 'yes'):
+#   DATABASES['default']['OPTIONS'] = {'ssl': {'check_hostname': False}
 
 
 
