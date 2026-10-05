@@ -1,0 +1,149 @@
+{% extends 'core/index.html' %}
+
+{% block content %}
+    {% if perfil %}
+    <div class="dashboard-cabecalho">
+        <h3>Aqui está o resumo da sua pele, {{ perfil.usuario.nome_usuario|default:'usuário' }}.</h3>
+    </div>
+
+    <div class="dashboard-secao">
+        <div class="card card-saude">
+                       <div class="circulo-saude" style="--score-fill: {{ perfil.porcentagem_saude }}%; --score-color: {% if perfil.porcentagem_saude >= 85 %}#10b981{% elif perfil.porcentagem_saude >= 70 %}#0d7cb3{% elif perfil.porcentagem_saude >= 50 %}#a46fd2{% else %}#e35d6a{% endif %};">
+                <h2>{{ perfil.porcentagem_saude }}%</h2>
+                <span>Score Atual</span>
+            </div>
+            <div class="health-info">
+                <h3>Saúde da Pele <span class="perfil">{{ perfil.tipo_pele|capfirst }}</span></h3>
+                <p>Idade: {{ perfil.idade }} anos | Objetivo: {{ perfil.objetivo|default:'Melhorar a pele' }}.</p>
+                <div class="detalhes">
+                    <div>
+                        <span class="preferencias">Preferência</span>
+                        <strong>{{ perfil.preferencia_produto|capfirst }}</strong>
+                    </div>
+                    <div>
+                        <span class="preferencias">Usa maquiagem</span>
+                        <strong>{% if perfil.usa_maquiagem_diariamente == 'sim' %}Sim{% else %}Não{% endif %}</strong>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card perfil">
+            <h2>Perfil Dermatológico</h2>
+            <h3 class="fototipo">{{ perfil.fototipo }} <small>FOTOTIPO</small></h3>
+            <p>
+                {% if perfil.fototipo <= 2 %}
+                    Pele mais sensível ao sol — reforce o protetor solar ao longo do dia.
+                {% elif perfil.fototipo <= 4 %}
+                    Pele moderadamente sensível ao sol — use protetor solar regularmente.
+                {% else %}
+                    Pele mais resistente ao sol, mas não se esqueça do protetor solar.
+                {% endif %}
+            </p>
+        </div>
+    </div>
+
+    <div class="dashboard-rotina">
+    <div class="card card-rotina-diaria">
+        <div class="status-cabecalho">
+            <h3>Status de Hoje</h3>
+            <div class="escolha" role="tablist" aria-label="Período do dia">
+                <button class="btn ativo" data-mode="manha" role="tab" aria-selected="true">Manhã</button>
+                <button class="btn" data-mode="noite" role="tab" aria-selected="false">Noite</button>
+            </div>
+        </div>
+
+        <ul class="rotina-lista" id="rotina-lista">
+            {% for item in rotina_manha %}
+            <li class="rotina-item {{ item.class }}">
+                <div class="status">
+                    {% if item.icon %}
+                    <i class="fa-solid {{ item.icon }}" aria-hidden="true"></i>
+                    {% endif %}
+                </div>
+                <div class="rotina-details">
+                    <strong>{{ item.title }}</strong>
+                    <span>{{ item.description }}</span>
+                </div>
+                {% if item.action %}
+                <div class="rotina-action">{{ item.action }}</div>
+                {% else %}
+                <div class="rotina-time">{{ item.time }}</div>
+                {% endif %}
+            </li>
+            {% endfor %}
+        </ul>
+
+        {{ rotina_manha|json_script:"rotina-manha-data" }}
+        {{ rotina_noite|json_script:"rotina-noite-data" }}
+    </div>
+    <script>
+        (function() {
+            const rotinaManha = JSON.parse(document.getElementById('rotina-manha-data').textContent);
+            const rotinaNoite = JSON.parse(document.getElementById('rotina-noite-data').textContent);
+            const listaRotina = document.getElementById('rotina-lista');
+            const botoes = document.querySelectorAll('.escolha .btn');
+
+            function criarItemRotina(item) {
+                const li = document.createElement('li');
+                li.className = `rotina-item ${item.class}`;
+
+                const status = document.createElement('div');
+                status.className = 'status';
+                if (item.icon) {
+                    const icone = document.createElement('i');
+                    icone.className = `fa-solid ${item.icon}`;
+                    icone.setAttribute('aria-hidden', 'true');
+                    status.appendChild(icone);
+                }
+
+                const detalhes = document.createElement('div');
+                detalhes.className = 'rotina-details';
+                const titulo = document.createElement('strong');
+                titulo.textContent = item.title;
+                const descricao = document.createElement('span');
+                descricao.textContent = item.description;
+                detalhes.append(titulo, descricao);
+
+                const extra = document.createElement('div');
+                if (item.action) {
+                    extra.className = 'rotina-action';
+                    extra.textContent = item.action;
+                } else {
+                    extra.className = 'rotina-time';
+                    extra.textContent = item.time || '';
+                }
+
+                li.append(status, detalhes, extra);
+                return li;
+            }
+
+            function renderizarRotina(itens) {
+                listaRotina.innerHTML = ''; // string vazia, sem risco - so limpa a lista
+                itens.forEach(item => listaRotina.appendChild(criarItemRotina(item)));
+            }
+
+            botoes.forEach(botao => {
+                botao.addEventListener('click', () => {
+                    botoes.forEach(b => {
+                        b.classList.remove('ativo');
+                        b.setAttribute('aria-selected', 'false');
+                    });
+                    botao.classList.add('ativo');
+                    botao.setAttribute('aria-selected', 'true');
+                    renderizarRotina(botao.dataset.mode === 'noite' ? rotinaNoite : rotinaManha);
+                });
+            });
+        })();
+    </script>
+</div>
+
+    {% else %}
+    <div class="dashboard-cabecalho">
+        <p>Nenhum perfil encontrado. Complete o questionário para ver o seu dashboard.</p>
+    </div>
+    {% endif %}
+{% endblock %}
+
+
+
