@@ -31,3 +31,4 @@ python manage.py runserver
 ```powershell
 pip freeze > requirements.txt
 ```
+teste
