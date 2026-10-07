@@ -109,17 +109,34 @@ WSGI_APPLICATION = 'configuracao.wsgi.application'
 # Chave da YouCam: coloque YOUCAM_API_KEY no .env.
 YOUCAM_API_KEY = os.getenv('YOUCAM_API_KEY', '')
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.getenv('DB_NAME', ''),
-        'USER': os.getenv('DB_USER', ''),
-        'PASSWORD': os.getenv('DB_PASSWORD', ''),
-        'HOST': os.getenv('DB_HOST', ''),
-        'PORT': os.getenv('DB_PORT', ''),
-        'OPTIONS': {'sslmode': 'require'},
+from urllib.parse import urlparse, unquote
+
+_db_url = os.getenv('DATABASE_URL') or os.getenv('POSTGRES_URL')
+if _db_url:
+    _u = urlparse(_db_url)
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': _u.path.lstrip('/'),
+            'USER': unquote(_u.username or ''),
+            'PASSWORD': unquote(_u.password or ''),
+            'HOST': _u.hostname,
+            'PORT': _u.port or 5432,
+            'OPTIONS': {'sslmode': 'require'},
+        }
     }
-}
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': os.getenv('DB_NAME', ''),
+            'USER': os.getenv('DB_USER', ''),
+            'PASSWORD': os.getenv('DB_PASSWORD', ''),
+            'HOST': os.getenv('DB_HOST', ''),
+            'PORT': os.getenv('DB_PORT', '5432'),
+            'OPTIONS': {'sslmode': 'require'},
+        }
+    }
 
 # bancos MySQL na nuvem (Aiven, TiDB Cloud, etc.) costumam exigir SSL.
 # coloque DB_SSL=true nas variaveis de ambiente pra ativar.
