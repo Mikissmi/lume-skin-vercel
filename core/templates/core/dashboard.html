@@ -29,17 +29,22 @@
         </div>
 
         <div class="card perfil">
-            <h2>Perfil Dermatológico</h2>
-            <h3 class="fototipo">{{ perfil.fototipo }} <small>FOTOTIPO</small></h3>
-            <p>
-                {% if perfil.fototipo <= 2 %}
-                    Pele mais sensível ao sol — reforce o protetor solar ao longo do dia.
-                {% elif perfil.fototipo <= 4 %}
-                    Pele moderadamente sensível ao sol — use protetor solar regularmente.
-                {% else %}
-                    Pele mais resistente ao sol, mas não se esqueça do protetor solar.
-                {% endif %}
-            </p>
+            <h2>Fototipo</h2>
+            {% if fototipo %}
+            <div class="fototipo-linha">
+                <span class="fototipo-numero">{{ fototipo.romano }}</span>
+                <small>escala Fitzpatrick</small>
+            </div>
+            <!-- barra de 6 tons: o da pessoa tem contorno roxo (o aria-label diz o mesmo para quem nao enxerga cores) -->
+            <ul class="fototipo-escala" role="img" aria-label="Fototipo {{ fototipo.romano }} de VI na escala Fitzpatrick">
+                {% for tom in fototipo.tons %}
+                <li{% if tom.atual %} class="atual"{% endif %} style="background-color: {{ tom.cor }}"></li>
+                {% endfor %}
+            </ul>
+            <p>{{ fototipo.texto }}</p>
+            {% else %}
+            <p>Fototipo não informado. Refaça o questionário para ver essa informação.</p>
+            {% endif %}
         </div>
     </div>
 

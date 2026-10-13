@@ -631,6 +631,34 @@ def tela_questionario(request):
     return render(request, 'core/questionario.html')
 
 
+# Escala de Fitzpatrick do card "Fototipo" do dashboard: numero (1 a 6, o mesmo que
+# fica em perfil.fototipo) -> (algarismo romano, cor da pilula, texto sobre o sol).
+# Na ordem da escala, do tom mais claro ao mais escuro.
+FOTOTIPOS = {
+    1: ('I', '#f3d9c8', 'Sensibilidade muito alta ao sol. Use protetor solar todos os dias e evite o sol forte.'),
+    2: ('II', '#e7bb9a', 'Sensibilidade alta ao sol. Use protetor solar todos os dias, mesmo em dias nublados.'),
+    3: ('III', '#c98e63', 'Sensibilidade moderada ao sol. Use protetor solar todos os dias, mesmo em dias nublados.'),
+    4: ('IV', '#a86c44', 'Sensibilidade moderada a baixa ao sol. Use protetor solar todos os dias.'),
+    5: ('V', '#7a4b2e', 'Sensibilidade baixa ao sol, mas a proteção solar continua importante.'),
+    6: ('VI', '#4a2d1b', 'Sensibilidade baixa ao sol, mas a proteção solar continua importante.'),
+}
+
+
+# dados do card "Fototipo". Sem fototipo valido (campo pode estar vazio) devolve None
+def _fototipo_do_perfil(perfil):
+    if not perfil or perfil.fototipo not in FOTOTIPOS:
+        return None
+    romano, _, texto = FOTOTIPOS[perfil.fototipo]
+    return {
+        'romano': romano,
+        'texto': texto,
+        'tons': [
+            {'romano': r, 'cor': cor, 'atual': numero == perfil.fototipo}
+            for numero, (r, cor, _) in FOTOTIPOS.items()
+        ],
+    }
+
+
 # o JS do dashboard redesenha a lista ao trocar de aba e nao tem {% url %}:
 # por isso o link da tela de detalhe do produto ja vai pronto em cada passo
 def _com_link(passos):
@@ -654,6 +682,7 @@ def dashboard_view(request):
         'rotina_manha': _com_link(rotina['manha']),
         'rotina_noite': _com_link(rotina['noite']),
         'avisos': rotina['avisos'],
+        'fototipo': _fototipo_do_perfil(perfil),
         'objetivo_rotulo': rotulo_objetivo(perfil.objetivo) if perfil else '',
     }
     return render(request, 'core/dashboard.html', context)

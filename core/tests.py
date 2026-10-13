@@ -15,7 +15,7 @@ from .recomendacao import (
     montar_rotina, normalizar_objetivo, pontuar_produto, preocupacoes_de_tratamento,
     preocupacoes_do_perfil, recomendar_produtos, rotulo_objetivo,
 )
-from .views import _alergias_do_perfil, _indicadores_do_perfil, _iniciais_do_nome
+from .views import FOTOTIPOS, _alergias_do_perfil, _fototipo_do_perfil, _indicadores_do_perfil, _iniciais_do_nome
 
 
 # ==========================================================================
@@ -1073,3 +1073,45 @@ class DashboardRotinaTests(PerfilBaseTestCase):
         # usuario que respondeu o questionario antes das Fases 2 e 3: so os padroes dos campos novos
         PerfilDermatologico.objects.filter(pk=self.perfil.pk).update(sensibilidade=False, gestante=False, tipo_acne='')
         self.assertEqual(self.abrir().status_code, 200)
+
+
+class DashboardFototipoTests(PerfilBaseTestCase):
+    # perfil da PerfilBaseTestCase: fototipo 3
+    def test_card_mostra_numero_romano_escala_e_texto(self):
+        resposta = self.client.get(reverse('dashboard'))
+        self.assertContains(resposta, '<h2>Fototipo</h2>', html=True)
+        self.assertContains(resposta, '<span class="fototipo-numero">III</span>', html=True)
+        self.assertContains(resposta, 'escala Fitzpatrick')
+        self.assertContains(resposta, 'Sensibilidade moderada ao sol. Use protetor solar todos os dias, mesmo em dias nublados.')
+        self.assertContains(resposta, 'aria-label="Fototipo III de VI na escala Fitzpatrick"')
+        self.assertNotContains(resposta, 'Perfil Dermatológico')
+
+    def test_barra_tem_6_tons_e_so_o_do_perfil_esta_marcado(self):
+        resposta = self.client.get(reverse('dashboard'))
+        tons = resposta.context['fototipo']['tons']
+        self.assertEqual([t['romano'] for t in tons], ['I', 'II', 'III', 'IV', 'V', 'VI'])
+        self.assertEqual([t['atual'] for t in tons], [False, False, True, False, False, False])
+        self.assertContains(resposta, 'class="atual" style="background-color: #c98e63"')
+        self.assertContains(resposta, 'background-color: #f3d9c8')   # tom I
+        self.assertContains(resposta, 'background-color: #4a2d1b')   # tom VI
+
+    def test_todos_os_fototipos_do_questionario_funcionam(self):
+        # o questionario grava de 1 a 6 (reacao_sol + 1)
+        for numero, (romano, _, texto) in FOTOTIPOS.items():
+            self.perfil.fototipo = numero
+            info = _fototipo_do_perfil(self.perfil)
+            self.assertEqual(info['romano'], romano)
+            self.assertEqual(info['texto'], texto)
+            self.assertEqual([t['atual'] for t in info['tons']].index(True), numero - 1)
+
+    def test_sem_fototipo_ou_fora_da_escala_mostra_mensagem_e_nao_quebra(self):
+        for valor in (None, 0, 7):
+            PerfilDermatologico.objects.filter(pk=self.perfil.pk).update(fototipo=valor)
+            resposta = self.client.get(reverse('dashboard'))
+            self.assertEqual(resposta.status_code, 200)
+            self.assertIsNone(resposta.context['fototipo'])
+            self.assertContains(resposta, 'Fototipo não informado')
+            self.assertNotContains(resposta, 'fototipo-escala')
+
+    def test_sem_perfil_nao_tem_card(self):
+        self.assertIsNone(_fototipo_do_perfil(None))
