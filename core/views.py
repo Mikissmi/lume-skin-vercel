@@ -1,10 +1,13 @@
 from django.shortcuts import render, redirect, get_object_or_404
-from django.contrib.auth import login as auth_login, authenticate, logout as auth_logout
+from django.contrib import messages
+from django.contrib.auth import login as auth_login, authenticate, logout as auth_logout, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.forms import PasswordChangeForm
 from django.conf import settings
 from django.core.cache import cache
 from django.http import JsonResponse
 from django.urls import reverse
+from django.utils import timezone
 from functools import wraps
 from .models import Usuario, PerfilDermatologico, Artigo, Especialista, Produto
 from .recomendacao import recomendar_produtos, classificar_indicador
@@ -895,58 +898,278 @@ def tela_scanner(request):
 # PERFIL DO USUÁRIO
 # ==========================================================================
 
-def tela_perfil(request):
-    if request.user.is_authenticated:
-        perfil = PerfilDermatologico.objects.filter(usuario=request.user).first()
-    else:
-        perfil = None
+# abas da tela de perfil, na ordem em que aparecem no menu. a aba aberta vem
+# na URL (?aba=pele) e cada aba tem o seu proprio formulario/POST
+ABAS_PERFIL = ('resumo', 'dados', 'pele', 'seguranca', 'privacidade')
 
-    context = {
-        'perfil': perfil,
+# objetivos oferecidos no select da aba "Perfil de pele" (mesmos do questionario).
+# se o objetivo salvo for outro texto (opcao "Outro"), ele entra na lista tambem
+OBJETIVOS_PERFIL = [
+    'Controlar oleosidade',
+    'Reduzir manchas',
+    'Hidratar a pele',
+    'Prevenir sinais de idade',
+]
+
+# ordem e titulo dos indicadores no "Resumo da pele" (iguais aos do scanner)
+INDICADORES_RESUMO = [
+    ('oleosidade', 'Oleosidade'),
+    ('hidratacao', 'Hidratação'),
+    ('acne_poros', 'Acne/Poros'),
+    ('textura', 'Textura'),
+    ('manchas', 'Manchas'),
+]
+
+# classe do selo de cada classificacao (Regular usa o visual padrao, sem classe extra)
+CLASSE_SELO_INDICADOR = {
+    'Ótimo': 'badge-otimo',
+    'Bom': 'badge-bom',
+    'Atenção': 'badge-atencao',
+}
+
+
+def _perfil_do_usuario(usuario):
+    return PerfilDermatologico.objects.filter(usuario=usuario).first()
+
+
+def _indicadores_do_perfil(perfil):
+    # refaz os indicadores do ultimo scan a partir do JSON da YouCam salvo em
+    # perfil.dados_ia (mesmas funcoes que o scanner usa). sem scan salvo = lista vazia
+    if not perfil or not perfil.dados_ia:
+        return []
+    try:
+        resultados_ia = json.loads(perfil.dados_ia)
+    except (json.JSONDecodeError, TypeError):
+        return []
+
+    notas = {
+        'oleosidade': _extract_score(resultados_ia, 'oiliness'),
+        'hidratacao': _extract_score(resultados_ia, 'moisture'),
+        'acne_poros': _media_ou_none(
+            _extract_score(resultados_ia, 'acne'),
+            _extract_score(resultados_ia, 'pore'),
+        ),
+        'textura': _extract_score(resultados_ia, 'texture'),
+        'manchas': _extract_score(resultados_ia, 'age_spot'),
     }
-    return render(request, 'core/perfil.html', context)
+
+    indicadores = []
+    for chave, titulo in INDICADORES_RESUMO:
+        indicador = montar_indicador(chave, notas[chave])
+        indicador['titulo'] = titulo
+        indicador['classe_selo'] = CLASSE_SELO_INDICADOR.get(indicador['classificacao'], '')
+        indicadores.append(indicador)
+
+    # se nenhum indicador foi medido, e como se nao houvesse scan
+    if all(indicador['nota'] is None for indicador in indicadores):
+        return []
+    return indicadores
+
+
+def _iniciais_do_nome(nome):
+    # "Ana Souza" -> "AS" (avatar sem foto)
+    partes = (nome or '').split()
+    if not partes:
+        return 'U'
+    if len(partes) == 1:
+        return partes[0][:2].upper()
+    return (partes[0][0] + partes[-1][0]).upper()
+
+
+def _alergias_do_perfil(perfil):
+    # o questionario guarda '0'/'1' (nao/sim) ou o texto digitado; so o texto vira etiqueta
+    texto = (perfil.alergias or '').strip()
+    if texto in ('', '0', '1'):
+        return []
+    return [item.strip() for item in texto.replace(';', ',').split(',') if item.strip()]
+
+
+def _contexto_perfil(request, perfil, aba, form_senha=None):
+    # tudo que o core/perfil.html precisa, incluindo o formulario de senha
+    # (volta preenchido, com os erros, quando a troca de senha falha)
+    objetivos = list(OBJETIVOS_PERFIL)
+    if perfil and perfil.objetivo and perfil.objetivo not in objetivos:
+        objetivos.append(perfil.objetivo)
+
+    return {
+        'perfil': perfil,
+        'aba_ativa': aba if aba in ABAS_PERFIL else 'resumo',
+        'iniciais': _iniciais_do_nome(request.user.nome_usuario),
+        'indicadores': _indicadores_do_perfil(perfil),
+        'alergias_lista': _alergias_do_perfil(perfil) if perfil else [],
+        'objetivos': objetivos,
+        'form_senha': form_senha or PasswordChangeForm(request.user),
+    }
+
+
+def _voltar_ao_perfil(aba):
+    # depois de cada POST volta pra mesma aba (e as mensagens aparecem la)
+    return redirect(f"{reverse('perfil')}?aba={aba}")
+
+
+@login_required
+def tela_perfil(request):
+    perfil = _perfil_do_usuario(request.user)
+    aba = request.GET.get('aba', 'resumo')
+    return render(request, 'core/perfil.html', _contexto_perfil(request, perfil, aba))
+
+
+@login_required
+def editar_dados_pessoais(request):
+    # aba "Dados pessoais": nome e idade (o e-mail e o login e nao muda por aqui)
+    if request.method != 'POST':
+        return _voltar_ao_perfil('dados')
+
+    nome_usuario = request.POST.get('nome_usuario', '').strip()
+    if not nome_usuario:
+        messages.error(request, 'Informe o seu nome.')
+        return _voltar_ao_perfil('dados')
+
+    request.user.nome_usuario = nome_usuario[:100]
+    request.user.save(update_fields=['nome_usuario'])
+
+    # a idade fica no perfil, que so existe depois do questionario
+    perfil = _perfil_do_usuario(request.user)
+    if perfil and request.POST.get('idade'):
+        # valor invalido (texto ou fora de 0-120) mantem a idade que ja estava
+        perfil.idade = _inteiro(request.POST.get('idade'), perfil.idade, 0, 120)
+        perfil.save(update_fields=['idade'])
+
+    messages.success(request, 'Dados pessoais atualizados.')
+    return _voltar_ao_perfil('dados')
 
 
 @login_required
 def editar_perfil(request):
-    # o formulario de edicao fica embutido direto na aba "Preferencias da Conta"
-    # de core/perfil.html, entao essa view so processa o POST e volta pra la
-    perfil = PerfilDermatologico.objects.filter(usuario=request.user).first()
+    # aba "Perfil de pele": tipo de pele, objetivo, alergias e preferencias.
+    # o formulario fica embutido em core/perfil.html, entao essa view so
+    # processa o POST e volta pra la
+    perfil = _perfil_do_usuario(request.user)
     if not perfil:
         return redirect('questionario')
 
-    destino = f"{reverse('perfil')}?aba=conta"
-
     if request.method != 'POST':
-        return redirect(destino)
+        return _voltar_ao_perfil('pele')
 
-    nome_usuario = request.POST.get('nome_usuario', '').strip()
-    idade = request.POST.get('idade')
     tipo_pele = request.POST.get('tipo_pele')
     alergias = request.POST.get('alergias', '').strip()
     objetivo = request.POST.get('objetivo', '').strip()
     preferencia_produto = request.POST.get('preferencia_produto')
     usa_maquiagem_diariamente = request.POST.get('usa_maquiagem_diariamente')
 
-    if nome_usuario:
-        request.user.nome_usuario = nome_usuario
-        request.user.save()
-
-    if idade:
-        # valor invalido (texto ou fora de 0-120) mantem a idade que ja estava
-        perfil.idade = _inteiro(idade, perfil.idade, 0, 120)
     if tipo_pele in dict(PerfilDermatologico.TIPO_PELE_CHOICES):
         perfil.tipo_pele = tipo_pele
-    perfil.alergias = alergias
+    perfil.alergias = alergias[:255]
     if objetivo:
-        perfil.objetivo = objetivo
+        perfil.objetivo = objetivo[:100]
     if preferencia_produto in ('creme', 'gel'):
         perfil.preferencia_produto = preferencia_produto
     if usa_maquiagem_diariamente in ('sim', 'nao'):
         perfil.usa_maquiagem_diariamente = usa_maquiagem_diariamente
 
     perfil.save()
-    return redirect(destino)
+    messages.success(request, 'Perfil de pele atualizado. As recomendações já usam as novas respostas.')
+    return _voltar_ao_perfil('pele')
+
+
+@login_required
+def alterar_senha(request):
+    # aba "Seguranca": troca de senha com o formulario pronto do Django
+    # (pede a senha atual e aplica os AUTH_PASSWORD_VALIDATORS do settings)
+    if request.method != 'POST':
+        return _voltar_ao_perfil('seguranca')
+
+    form = PasswordChangeForm(request.user, request.POST)
+    if form.is_valid():
+        usuario = form.save()
+        # sem isso a troca de senha derruba a sessao de quem acabou de trocar
+        update_session_auth_hash(request, usuario)
+        messages.success(request, 'Senha alterada com sucesso.')
+        return _voltar_ao_perfil('seguranca')
+
+    # senha invalida: mostra a mesma tela com os erros embaixo dos campos
+    perfil = _perfil_do_usuario(request.user)
+    return render(request, 'core/perfil.html', _contexto_perfil(request, perfil, 'seguranca', form))
+
+
+@login_required
+def apagar_foto_perfil(request):
+    # aba "Privacidade e dados": apaga a imagem do scan guardada no perfil
+    if request.method != 'POST':
+        return _voltar_ao_perfil('privacidade')
+
+    perfil = _perfil_do_usuario(request.user)
+    if perfil and perfil.foto_rosto:
+        perfil.foto_rosto = None
+        perfil.save(update_fields=['foto_rosto'])
+        messages.success(request, 'A imagem do scan foi apagada da sua conta.')
+    else:
+        messages.info(request, 'Não há nenhuma imagem de scan guardada na sua conta.')
+    return _voltar_ao_perfil('privacidade')
+
+
+@login_required
+def exportar_dados(request):
+    # aba "Privacidade e dados": baixa uma copia dos dados da conta em JSON
+    perfil = _perfil_do_usuario(request.user)
+
+    dados = {
+        'exportado_em': timezone.now().isoformat(),
+        'conta': {
+            'nome': request.user.nome_usuario,
+            'email': request.user.email,
+            'cadastrada_em': request.user.data_cadastro.isoformat(),
+        },
+        'perfil_dermatologico': None,
+    }
+
+    if perfil:
+        try:
+            analise_ia = json.loads(perfil.dados_ia) if perfil.dados_ia else None
+        except (json.JSONDecodeError, TypeError):
+            analise_ia = None
+
+        dados['perfil_dermatologico'] = {
+            'idade': perfil.idade,
+            'tipo_pele': perfil.tipo_pele,
+            'alergias': perfil.alergias,
+            'objetivo': perfil.objetivo,
+            'preferencia_produto': perfil.preferencia_produto,
+            'usa_maquiagem_diariamente': perfil.usa_maquiagem_diariamente,
+            'sono_horas': perfil.sono_horas,
+            'protetor_solar': perfil.protetor_solar,
+            'exercicio_frequencia': perfil.exercicio_frequencia,
+            'fototipo': perfil.fototipo,
+            'porcentagem_saude': perfil.porcentagem_saude,
+            'imagem_do_scan': perfil.foto_rosto,
+            'analise_ia': analise_ia,
+        }
+
+    resposta = JsonResponse(dados, json_dumps_params={'ensure_ascii': False, 'indent': 2})
+    resposta['Content-Disposition'] = f'attachment; filename="lume-skin-meus-dados-{timezone.localdate()}.json"'
+    return resposta
+
+
+@login_required
+def excluir_conta(request):
+    # aba "Privacidade e dados": apaga a conta e o perfil (o perfil tem
+    # on_delete=CASCADE no Usuario). pede a senha e a palavra EXCLUIR de
+    # confirmacao porque nao tem como desfazer
+    if request.method != 'POST':
+        return _voltar_ao_perfil('privacidade')
+
+    if request.POST.get('confirmacao', '').strip().upper() != 'EXCLUIR':
+        messages.error(request, 'Digite EXCLUIR para confirmar a exclusão da conta.')
+        return _voltar_ao_perfil('privacidade')
+
+    if not request.user.check_password(request.POST.get('senha', '')):
+        messages.error(request, 'Senha incorreta. A conta não foi excluída.')
+        return _voltar_ao_perfil('privacidade')
+
+    usuario = request.user
+    auth_logout(request)
+    usuario.delete()
+    return redirect('login')
 
 
 # ==========================================================================

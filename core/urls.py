@@ -31,8 +31,15 @@ urlpatterns = [
     # Rota para a página do perfil do usuário
     path('perfil/', views.tela_perfil, name='perfil'),
 
-    # Rota para editar as preferências do perfil do usuário
+    # Rota para editar as preferências do perfil do usuário (aba "Perfil de pele")
     path('perfil/editar/', views.editar_perfil, name='editar_perfil'),
+
+    # Rotas das outras abas de perfil e configurações
+    path('perfil/dados/', views.editar_dados_pessoais, name='editar_dados_pessoais'),
+    path('perfil/senha/', views.alterar_senha, name='alterar_senha'),
+    path('perfil/foto/apagar/', views.apagar_foto_perfil, name='apagar_foto_perfil'),
+    path('perfil/exportar/', views.exportar_dados, name='exportar_dados'),
+    path('perfil/excluir/', views.excluir_conta, name='excluir_conta'),
 
     # Rota para a página dos especialistas
     path('especialistas/', views.tela_especialistas, name='especialistas'),
