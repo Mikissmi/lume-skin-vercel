@@ -63,7 +63,7 @@
                 </div>
                 <div class="rotina-details">
                     <strong>{{ item.title }}</strong>
-                    <span>{{ item.description }}</span>
+                    <span>{% if item.url %}<a href="{{ item.url }}">{{ item.description }}</a>{% else %}{{ item.description }}{% endif %}</span>
                 </div>
                 {% if item.action %}
                 <div class="rotina-action">{{ item.action }}</div>
@@ -73,6 +73,13 @@
             </li>
             {% endfor %}
         </ul>
+
+        <div class="rotina-avisos">
+            {% for aviso in avisos %}
+            <p class="rotina-aviso{% if aviso.destaque %} destaque{% endif %}" role="note">{{ aviso.texto }}</p>
+            {% endfor %}
+            <p class="rotina-aviso fixo" role="note">Esta rotina não substitui a avaliação de um dermatologista.</p>
+        </div>
 
         {{ rotina_manha|json_script:"rotina-manha-data" }}
         {{ rotina_noite|json_script:"rotina-noite-data" }}
@@ -102,7 +109,15 @@
                 const titulo = document.createElement('strong');
                 titulo.textContent = item.title;
                 const descricao = document.createElement('span');
-                descricao.textContent = item.description;
+                if (item.url) {
+                    /* produto do catalogo: o texto vira link para a tela de detalhe */
+                    const link = document.createElement('a');
+                    link.href = item.url;
+                    link.textContent = item.description;
+                    descricao.appendChild(link);
+                } else {
+                    descricao.textContent = item.description;
+                }
                 detalhes.append(titulo, descricao);
 
                 const extra = document.createElement('div');

@@ -12,7 +12,7 @@ from functools import wraps
 from .models import Usuario, PerfilDermatologico, Artigo, Especialista, Produto
 from .youcam_utils import _extract_score
 from .recomendacao import (
-    OBJETIVOS, recomendar_produtos, classificar_indicador, normalizar_objetivo, rotulo_objetivo,
+    OBJETIVOS, recomendar_produtos, classificar_indicador, montar_rotina, normalizar_objetivo, rotulo_objetivo,
 )
 import requests
 import io
@@ -631,6 +631,14 @@ def tela_questionario(request):
     return render(request, 'core/questionario.html')
 
 
+# o JS do dashboard redesenha a lista ao trocar de aba e nao tem {% url %}:
+# por isso o link da tela de detalhe do produto ja vai pronto em cada passo
+def _com_link(passos):
+    for passo in passos:
+        passo['url'] = reverse('produto_detalhe', args=[passo['produto_id']]) if passo['produto_id'] else None
+    return passos
+
+
 def dashboard_view(request):
     # sem login nao mostra perfil (antes pegava o primeiro do banco, que e de outra pessoa)
     if request.user.is_authenticated:
@@ -638,66 +646,14 @@ def dashboard_view(request):
     else:
         perfil = None
 
-    rotina_manha = []
-    rotina_noite = []
-    if perfil:
-        rotina_manha = [
-            {
-                'class': 'completed',
-                'title': 'Limpeza Suave',
-                'description': f'Rotina de limpeza diária para pele {perfil.tipo_pele}',
-                'time': '08:00',
-                'action': None,
-                'icon': 'fa-check',
-            },
-            {
-                'class': 'action-required' if perfil.porcentagem_saude < 80 else 'completed',
-                'title': 'Hidratação & Tratamento',
-                'description': f'Sérum recomendado para objetivo "{perfil.objetivo}"',
-                'time': None if perfil.porcentagem_saude < 80 else '19:00',
-                'action': 'Fazer agora' if perfil.porcentagem_saude < 80 else None,
-                'icon': 'fa-check' if perfil.porcentagem_saude >= 80 else None,
-            },
-            {
-                'class': 'pending' if perfil.fototipo and perfil.fototipo < 5 else 'completed',
-                'title': 'Proteção Solar',
-                'description': f'FPS 50+ para fototipo {perfil.fototipo or "1"}',
-                'time': '12:00' if perfil.fototipo and perfil.fototipo < 5 else 'Já feito',
-                'action': None,
-                'icon': 'fa-check' if perfil.fototipo and perfil.fototipo >= 5 else None,
-            },
-        ]
-        rotina_noite = [
-            {
-                'class': 'completed',
-                'title': 'Remoção de Maquiagem',
-                'description': 'Demaquilante suave antes de dormir',
-                'time': '21:00',
-                'action': None,
-                'icon': 'fa-check',
-            },
-            {
-                'class': 'completed',
-                'title': 'Tratamento Noturno',
-                'description': f'Sérum calmante para {perfil.tipo_pele}',
-                'time': '21:30',
-                'action': None,
-                'icon': 'fa-check',
-            },
-            {
-                'class': 'pending',
-                'title': 'Hidratação Profunda',
-                'description': 'Creme nutritivo para reparar enquanto dorme',
-                'time': '22:00',
-                'action': 'Aplicar agora',
-                'icon': None,
-            },
-        ]
+    # rotina real (produtos do catalogo) montada em recomendacao.py; sem perfil vem vazia
+    rotina = montar_rotina(perfil)
 
     context = {
         'perfil': perfil,
-        'rotina_manha': rotina_manha,
-        'rotina_noite': rotina_noite,
+        'rotina_manha': _com_link(rotina['manha']),
+        'rotina_noite': _com_link(rotina['noite']),
+        'avisos': rotina['avisos'],
         'objetivo_rotulo': rotulo_objetivo(perfil.objetivo) if perfil else '',
     }
     return render(request, 'core/dashboard.html', context)

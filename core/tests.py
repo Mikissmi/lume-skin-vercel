@@ -980,3 +980,96 @@ class PontuacaoTests(TestCase):
         self.assertEqual(len(recomendar_produtos(None)), 2)
         madura = novo_perfil(idade=45, tipo_pele='normal', objetivo='hidratar')
         self.assertEqual([p.nome for p in recomendar_produtos(madura)], ['A'])
+
+
+# ==========================================================================
+# DASHBOARD - mostra a rotina real (Manha/Noite), os avisos e o link dos produtos
+# ==========================================================================
+
+class DashboardRotinaTests(PerfilBaseTestCase):
+    # usuario logado da PerfilBaseTestCase: 27 anos, pele mista, objetivo "controlar oleosidade"
+    def setUp(self):
+        super().setUp()
+        self.limpeza = criar_produto('Gel de Limpeza', 'Limpeza', 'Glicerina')
+        self.hidratante = criar_produto('Hidratante Basico', 'Hidratante', 'Ceramidas')
+        self.protetor = criar_produto('Protetor FPS', 'Protetor Solar', 'Filtro Solar', modo_uso='Manhã')
+        criar_regra('25-36', 'mista', 'Poros Dilatados', 'Niacinamida + Argila + Ácido Salicílico')
+        self.serum = criar_produto('Serum Niacinamida', 'Sérum', 'Niacinamida', modo_uso='Manhã e Noite')
+
+    def abrir(self):
+        return self.client.get(reverse('dashboard'))
+
+    def test_mostra_produtos_reais_e_nao_o_texto_fixo(self):
+        resposta = self.abrir()
+        self.assertContains(resposta, 'Marca - Serum Niacinamida (Niacinamida)')
+        self.assertContains(resposta, 'Marca - Hidratante Basico')
+        self.assertNotContains(resposta, 'Rotina de limpeza diária')
+        self.assertNotContains(resposta, 'Sérum calmante')
+
+    def test_produto_vira_link_para_a_tela_de_detalhe(self):
+        resposta = self.abrir()
+        url = reverse('produto_detalhe', args=[self.serum.id])
+        self.assertContains(resposta, f'<a href="{url}">Marca - Serum Niacinamida (Niacinamida)</a>', html=True)
+
+    def test_as_duas_abas_chegam_ao_javascript_com_as_chaves_e_a_url(self):
+        resposta = self.abrir()
+        for chave, titulo_noite in (('rotina_manha', 'Limpeza'), ('rotina_noite', 'Limpeza e demaquilante')):
+            passos = resposta.context[chave]
+            self.assertEqual(passos[0]['title'], titulo_noite)
+            for passo in passos:
+                self.assertTrue(CHAVES_DO_DASHBOARD | {'produto_id', 'url'} <= set(passo))
+        self.assertContains(resposta, 'id="rotina-manha-data"')
+        self.assertContains(resposta, 'id="rotina-noite-data"')
+        self.assertEqual(resposta.context['rotina_manha'][-1]['title'], 'Protetor solar')   # so de manha
+        self.assertNotEqual(resposta.context['rotina_noite'][-1]['title'], 'Protetor solar')
+
+    def test_passo_sem_produto_aparece_generico_e_sem_link(self):
+        Produto.objects.filter(categoria='Hidratante').delete()
+        resposta = self.abrir()
+        self.assertContains(resposta, 'Hidratante para pele mista')
+        passo = [p for p in resposta.context['rotina_manha'] if p['title'] == 'Hidratante'][0]
+        self.assertIsNone(passo['produto_id'])
+        self.assertIsNone(passo['url'])
+
+    def test_avisos_e_aviso_fixo_do_dermatologista(self):
+        resposta = self.abrir()
+        self.assertContains(resposta, 'Confira o rótulo')
+        self.assertContains(resposta, 'Esta rotina não substitui a avaliação de um dermatologista.')
+
+    def test_aviso_destacado_para_acne_nodular(self):
+        self.perfil.objetivo = 'reduzir acne'
+        self.perfil.tipo_acne = 'Nodular'
+        self.perfil.save()
+        resposta = self.abrir()
+        self.assertContains(resposta, 'class="rotina-aviso destaque"')
+        self.assertContains(resposta, 'Acne nodular: procure um dermatologista')
+
+    def test_sem_acne_nodular_nao_ha_aviso_destacado(self):
+        self.assertNotContains(self.abrir(), 'rotina-aviso destaque')
+
+    def test_menor_de_14_anos_ve_so_limpeza_hidratante_e_protetor(self):
+        self.perfil.idade = 12
+        self.perfil.save()
+        resposta = self.abrir()
+        self.assertEqual([p['title'] for p in resposta.context['rotina_manha']], ['Limpeza', 'Hidratante', 'Protetor solar'])
+        self.assertContains(resposta, 'class="rotina-aviso destaque"')
+
+    def test_sem_perfil_mostra_a_mensagem_atual(self):
+        self.client.logout()
+        criar_usuario_com_perfil('sem-perfil@email.com', com_perfil=False)
+        self.client.login(username='sem-perfil@email.com', password=SENHA)
+        resposta = self.abrir()
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, 'Nenhum perfil encontrado')
+        self.assertNotContains(resposta, 'rotina-avisos')
+
+    def test_visitante_sem_login_mostra_a_mensagem_atual(self):
+        self.client.logout()
+        resposta = self.abrir()
+        self.assertContains(resposta, 'Nenhum perfil encontrado')
+        self.assertEqual(resposta.context['rotina_manha'], [])
+
+    def test_perfil_antigo_sem_campos_novos_abre_o_dashboard(self):
+        # usuario que respondeu o questionario antes das Fases 2 e 3: so os padroes dos campos novos
+        PerfilDermatologico.objects.filter(pk=self.perfil.pk).update(sensibilidade=False, gestante=False, tipo_acne='')
+        self.assertEqual(self.abrir().status_code, 200)

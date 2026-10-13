@@ -1183,6 +1183,45 @@ body.body:has(.sidebar) {
     border-color: #cbd5e0;
 }
 
+/* Produto da rotina: o texto e um link para a tela de detalhe */
+.rotina-details a {
+    color: #0d7cb3;
+    text-decoration: none;
+}
+.rotina-details a:hover,
+.rotina-details a:focus-visible {
+    text-decoration: underline;
+}
+
+/* Avisos da rotina (abaixo da lista). .destaque = ex.: acne nodular/cistica */
+.rotina-avisos {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 20px;
+}
+.rotina-aviso {
+    margin: 0;
+    padding: 10px 14px;
+    border-radius: 12px;
+    background-color: #f7fafc;
+    border: 1px solid #edf2f7;
+    font-size: 12px;
+    line-height: 1.5;
+    color: #4a5568;
+}
+.rotina-aviso.destaque {
+    background-color: #fff5f5;
+    border-color: #fed7d7;
+    color: #c53030;
+    font-weight: 600;
+}
+.rotina-aviso.fixo {
+    background-color: transparent;
+    border-style: dashed;
+    font-style: italic;
+}
+
 /* ==========================================================================
    10. ESTILOS DA TELA DE SCANNER
    ========================================================================== */
