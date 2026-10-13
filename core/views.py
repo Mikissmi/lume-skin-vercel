@@ -10,7 +10,9 @@ from django.urls import reverse
 from django.utils import timezone
 from functools import wraps
 from .models import Usuario, PerfilDermatologico, Artigo, Especialista, Produto
-from .recomendacao import recomendar_produtos, classificar_indicador
+from .recomendacao import (
+    OBJETIVOS, recomendar_produtos, classificar_indicador, normalizar_objetivo, rotulo_objetivo,
+)
 import requests
 import io
 import json
@@ -560,6 +562,9 @@ def tela_questionario(request):
         pontos_sol = _inteiro(request.POST.get('reacao_sol'), 0, 0, 5)
         base_produto = request.POST.get('base_produto')
         objective = request.POST.get('objetivo')
+        sono_horas = request.POST.get('sono_horas')
+        exercicio_frequencia = request.POST.get('exercicio_frequencia')
+        protetor_solar = _inteiro(request.POST.get('protetor_solar'), None, 0, 2)  # None = nao respondeu
 
         # "Outro": guarda o texto que a pessoa digitou no lugar da palavra "outro"
         if objective == 'outro':
@@ -633,6 +638,13 @@ def tela_questionario(request):
             perfil.fototipo = pontos_sol + 1
             perfil.objetivo = objective or perfil.objetivo
             perfil.preferencia_produto = base_produto if base_produto in ('creme', 'gel') else perfil.preferencia_produto
+            # resposta fora das opcoes do model e ignorada (fica o valor que ja estava / o padrao)
+            if sono_horas in dict(PerfilDermatologico.SONO_CHOICES):
+                perfil.sono_horas = sono_horas
+            if exercicio_frequencia in dict(PerfilDermatologico.EXERCICIO_CHOICES):
+                perfil.exercicio_frequencia = exercicio_frequencia
+            if protetor_solar is not None:
+                perfil.protetor_solar = protetor_solar
             perfil.porcentagem_saude = porcentagem_calculada
             # so troca a analise se houve scan novo
             if dados_ia_json:
@@ -713,6 +725,7 @@ def dashboard_view(request):
         'perfil': perfil,
         'rotina_manha': rotina_manha,
         'rotina_noite': rotina_noite,
+        'objetivo_rotulo': rotulo_objetivo(perfil.objetivo) if perfil else '',
     }
     return render(request, 'core/dashboard.html', context)
 
@@ -902,15 +915,6 @@ def tela_scanner(request):
 # na URL (?aba=pele) e cada aba tem o seu proprio formulario/POST
 ABAS_PERFIL = ('resumo', 'dados', 'pele', 'seguranca', 'privacidade')
 
-# objetivos oferecidos no select da aba "Perfil de pele" (mesmos do questionario).
-# se o objetivo salvo for outro texto (opcao "Outro"), ele entra na lista tambem
-OBJETIVOS_PERFIL = [
-    'Controlar oleosidade',
-    'Reduzir manchas',
-    'Hidratar a pele',
-    'Prevenir sinais de idade',
-]
-
 # ordem e titulo dos indicadores no "Resumo da pele" (iguais aos do scanner)
 INDICADORES_RESUMO = [
     ('oleosidade', 'Oleosidade'),
@@ -987,9 +991,12 @@ def _alergias_do_perfil(perfil):
 def _contexto_perfil(request, perfil, aba, form_senha=None):
     # tudo que o core/perfil.html precisa, incluindo o formulario de senha
     # (volta preenchido, com os erros, quando a troca de senha falha)
-    objetivos = list(OBJETIVOS_PERFIL)
-    if perfil and perfil.objetivo and perfil.objetivo not in objetivos:
-        objetivos.append(perfil.objetivo)
+    # o select usa os mesmos objetivos do questionario (recomendacao.OBJETIVOS), como
+    # pares (valor, texto). se o objetivo salvo for texto livre (opcao "Outro"), entra na lista tambem
+    objetivos = list(OBJETIVOS.items())
+    objetivo_atual = normalizar_objetivo(perfil.objetivo) if perfil else ''
+    if objetivo_atual and objetivo_atual not in OBJETIVOS:
+        objetivos.append((objetivo_atual, objetivo_atual))
 
     return {
         'perfil': perfil,
@@ -998,6 +1005,8 @@ def _contexto_perfil(request, perfil, aba, form_senha=None):
         'indicadores': _indicadores_do_perfil(perfil),
         'alergias_lista': _alergias_do_perfil(perfil) if perfil else [],
         'objetivos': objetivos,
+        'objetivo_atual': objetivo_atual,
+        'objetivo_rotulo': rotulo_objetivo(perfil.objetivo) if perfil else '',
         'form_senha': form_senha or PasswordChangeForm(request.user),
     }
 
@@ -1053,7 +1062,7 @@ def editar_perfil(request):
 
     tipo_pele = request.POST.get('tipo_pele')
     alergias = request.POST.get('alergias', '').strip()
-    objetivo = request.POST.get('objetivo', '').strip()
+    objetivo = normalizar_objetivo(request.POST.get('objetivo'))  # grava o mesmo codigo do questionario
     preferencia_produto = request.POST.get('preferencia_produto')
     usa_maquiagem_diariamente = request.POST.get('usa_maquiagem_diariamente')
 
@@ -1199,7 +1208,7 @@ def tela_produtos(request):
 
     context = {
         "perfil": perfil,
-        "objetivo_usuario": perfil.objetivo if perfil else "não definido",
+        "objetivo_usuario": rotulo_objetivo(perfil.objetivo) if perfil else "não definido",
         "produtos": produtos,
         "filtro_ativo": filtro,
     }

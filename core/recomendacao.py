@@ -9,7 +9,26 @@ MAPA_TIPO_PELE = {
     'normal': 'Normal',
 }
 
-# Bate com os values do <select name="objetivo"> em questionario.html
+# Objetivos oferecidos nos DOIS formularios (questionario.html e aba "Perfil de pele").
+# A chave e o valor salvo no banco; o texto e o que aparece na tela.
+# Mexeu aqui? Ajuste tambem os <option> do questionario.html e o MAPA abaixo.
+OBJETIVOS = {
+    'hidratar': 'Hidratar',
+    'controlar oleosidade': 'Controlar oleosidade',
+    'reduzir manchas': 'Reduzir manchas',
+    'anti-idade': 'Anti-idade',
+    'reduzir acne': 'Reduzir acne',
+    'melhorar textura': 'Melhorar textura',
+}
+
+# Textos que a aba "Perfil de pele" gravava antes de unificar os valores. Quem ja
+# editou o perfil tem um deles no banco, entao convertemos na leitura (sem mexer nos dados).
+OBJETIVOS_ANTIGOS = {
+    'hidratar a pele': 'hidratar',
+    'prevenir sinais de idade': 'anti-idade',
+}
+
+# Bate com as chaves de OBJETIVOS
 MAPA_OBJETIVO_PREOCUPACAO = {
     'hidratar': {'Hidratação'},
     'controlar oleosidade': {'Oleosidade'},
@@ -25,6 +44,19 @@ CATEGORIA_POR_PREFERENCIA = {
     'creme': {'Hidratante', 'Contorno de Olhos', 'Máscara Facial'},
     'gel': {'Limpeza', 'Sérum', 'Tônico', 'Água Micelar', 'Esfoliante'},
 }
+
+
+def normalizar_objetivo(objetivo):
+    """Devolve o codigo do objetivo ('reduzir acne'). Texto livre ("Outro") passa sem mudar."""
+    texto = (objetivo or '').strip()
+    codigo = OBJETIVOS_ANTIGOS.get(texto.lower(), texto.lower())
+    return codigo if codigo in OBJETIVOS else texto
+
+
+def rotulo_objetivo(objetivo):
+    """Texto bonito para mostrar na tela ('reduzir acne' -> 'Reduzir acne')."""
+    texto = normalizar_objetivo(objetivo)
+    return OBJETIVOS.get(texto, texto)
 
 
 def classificar_indicador(nota):
@@ -72,7 +104,7 @@ def tipos_pele_compativeis(perfil, sinais_faciais):
 
 
 def preocupacoes_do_perfil(perfil, sinais_faciais):
-    preocupacoes = set(MAPA_OBJETIVO_PREOCUPACAO.get(perfil.objetivo, set()))
+    preocupacoes = set(MAPA_OBJETIVO_PREOCUPACAO.get(normalizar_objetivo(perfil.objetivo), set()))
 
     if sinais_faciais.get('oleosidade_alta'):
         preocupacoes.add('Oleosidade')

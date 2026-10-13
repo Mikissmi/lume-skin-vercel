@@ -4,6 +4,9 @@ from django.test import TestCase
 from django.urls import reverse
 
 from .models import Usuario, PerfilDermatologico
+from .recomendacao import (
+    MAPA_OBJETIVO_PREOCUPACAO, OBJETIVOS, normalizar_objetivo, preocupacoes_do_perfil, rotulo_objetivo,
+)
 from .views import _alergias_do_perfil, _indicadores_do_perfil, _iniciais_do_nome
 
 
@@ -23,7 +26,7 @@ def criar_usuario_com_perfil(email='ana@email.com', com_perfil=True):
             idade=27,
             tipo_pele='mista',
             alergias='fragrância, parabenos',
-            objetivo='Controlar oleosidade',
+            objetivo='controlar oleosidade',
             preferencia_produto='gel',
             usa_maquiagem_diariamente='nao',
             porcentagem_saude=78,
@@ -133,7 +136,7 @@ class PerfilDePeleTests(PerfilBaseTestCase):
     def test_atualiza_preferencias(self):
         resposta = self.client.post(reverse('editar_perfil'), {
             'tipo_pele': 'seca',
-            'objetivo': 'Hidratar a pele',
+            'objetivo': 'hidratar',
             'alergias': 'látex',
             'preferencia_produto': 'creme',
             'usa_maquiagem_diariamente': 'sim',
@@ -141,7 +144,7 @@ class PerfilDePeleTests(PerfilBaseTestCase):
         self.assertRedirects(resposta, f"{reverse('perfil')}?aba=pele")
         self.perfil.refresh_from_db()
         self.assertEqual(self.perfil.tipo_pele, 'seca')
-        self.assertEqual(self.perfil.objetivo, 'Hidratar a pele')
+        self.assertEqual(self.perfil.objetivo, 'hidratar')
         self.assertEqual(self.perfil.alergias, 'látex')
         self.assertEqual(self.perfil.preferencia_produto, 'creme')
         self.assertEqual(self.perfil.usa_maquiagem_diariamente, 'sim')
@@ -163,6 +166,131 @@ class PerfilDePeleTests(PerfilBaseTestCase):
         self.client.login(username='novo@email.com', password=SENHA)
         resposta = self.client.post(reverse('editar_perfil'), {'tipo_pele': 'seca'})
         self.assertRedirects(resposta, reverse('questionario'))
+
+    def test_objetivo_editado_continua_gerando_preocupacoes(self):
+        # bug da Fase 0: o texto da aba de perfil nao era entendido pelo mapa de recomendacao
+        for codigo, preocupacoes in MAPA_OBJETIVO_PREOCUPACAO.items():
+            self.client.post(reverse('editar_perfil'), {'objetivo': codigo})
+            self.perfil.refresh_from_db()
+            self.assertEqual(self.perfil.objetivo, codigo)
+            self.assertEqual(preocupacoes_do_perfil(self.perfil, {}), preocupacoes)
+
+    def test_texto_antigo_do_objetivo_e_convertido_ao_salvar(self):
+        self.client.post(reverse('editar_perfil'), {'objetivo': 'Prevenir sinais de idade'})
+        self.perfil.refresh_from_db()
+        self.assertEqual(self.perfil.objetivo, 'anti-idade')
+
+    def test_select_de_objetivo_mostra_o_objetivo_atual_selecionado(self):
+        self.perfil.objetivo = 'reduzir acne'
+        self.perfil.save()
+        resposta = self.client.get(reverse('perfil'), {'aba': 'pele'})
+        self.assertContains(resposta, '<option value="reduzir acne" selected>Reduzir acne</option>', html=True)
+        # as 6 opcoes do questionario existem no select
+        for codigo in OBJETIVOS:
+            self.assertContains(resposta, f'<option value="{codigo}"')
+
+    def test_objetivo_antigo_salvo_no_banco_aparece_selecionado(self):
+        self.perfil.objetivo = 'Hidratar a pele'  # gravado pela versao antiga da aba
+        self.perfil.save()
+        resposta = self.client.get(reverse('perfil'), {'aba': 'pele'})
+        self.assertContains(resposta, '<option value="hidratar" selected>Hidratar</option>', html=True)
+
+    def test_objetivo_texto_livre_continua_na_lista(self):
+        self.perfil.objetivo = 'pele de porcelana'
+        self.perfil.save()
+        resposta = self.client.get(reverse('perfil'), {'aba': 'pele'})
+        self.assertContains(resposta, '<option value="pele de porcelana" selected>pele de porcelana</option>', html=True)
+
+
+class ObjetivoTests(TestCase):
+    def test_normalizar_objetivo(self):
+        self.assertEqual(normalizar_objetivo('reduzir acne'), 'reduzir acne')
+        self.assertEqual(normalizar_objetivo('Controlar oleosidade'), 'controlar oleosidade')
+        self.assertEqual(normalizar_objetivo('Hidratar a pele'), 'hidratar')
+        self.assertEqual(normalizar_objetivo('Prevenir sinais de idade'), 'anti-idade')
+        self.assertEqual(normalizar_objetivo('  Meu Objetivo  '), 'Meu Objetivo')  # texto livre nao muda
+        self.assertEqual(normalizar_objetivo(None), '')
+
+    def test_rotulo_objetivo(self):
+        self.assertEqual(rotulo_objetivo('anti-idade'), 'Anti-idade')
+        self.assertEqual(rotulo_objetivo('Hidratar a pele'), 'Hidratar')
+        self.assertEqual(rotulo_objetivo('pele de porcelana'), 'pele de porcelana')
+
+    def test_todo_objetivo_tem_preocupacao_no_mapa(self):
+        self.assertEqual(set(OBJETIVOS), set(MAPA_OBJETIVO_PREOCUPACAO))
+
+    def test_questionario_oferece_os_mesmos_objetivos(self):
+        resposta = self.client.get(reverse('questionario'))
+        for codigo in OBJETIVOS:
+            self.assertContains(resposta, f'<option value="{codigo}">')
+
+    def test_telas_mostram_o_texto_e_nao_o_codigo(self):
+        usuario, _ = criar_usuario_com_perfil()
+        self.client.login(username='ana@email.com', password=SENHA)
+        for nome in ('dashboard', 'produtos'):
+            self.assertContains(self.client.get(reverse(nome)), 'Controlar oleosidade')
+
+
+# ==========================================================================
+# QUESTIONÁRIO - o POST precisa gravar todas as respostas no perfil
+# ==========================================================================
+
+def respostas_do_questionario(**mudancas):
+    respostas = {
+        'idade': '25', 'tipo_pele': 'oleosa', 'alergias': '0', 'maquiagem': '0',
+        'reacao_sol': '2', 'base_produto': 'gel', 'objetivo': 'reduzir acne',
+        'sono_horas': 'curto', 'exercicio_frequencia': '5x+', 'protetor_solar': '2',
+    }
+    respostas.update(mudancas)
+    return respostas
+
+
+class QuestionarioTests(TestCase):
+    def setUp(self):
+        self.usuario = Usuario.objects.create_user(email='nova@email.com', nome_usuario='Nova', password=SENHA)
+        self.client.login(username='nova@email.com', password=SENHA)
+
+    def perfil(self):
+        return PerfilDermatologico.objects.get(usuario=self.usuario)
+
+    def test_primeiro_envio_salva_sono_exercicio_protetor_e_objetivo(self):
+        resposta = self.client.post(reverse('questionario'), respostas_do_questionario())
+        self.assertRedirects(resposta, reverse('dashboard'))
+        perfil = self.perfil()
+        self.assertEqual(perfil.sono_horas, 'curto')
+        self.assertEqual(perfil.exercicio_frequencia, '5x+')
+        self.assertEqual(perfil.protetor_solar, 2)
+        self.assertEqual(perfil.objetivo, 'reduzir acne')
+
+    def test_responder_de_novo_atualiza_os_campos(self):
+        self.client.post(reverse('questionario'), respostas_do_questionario())
+        self.client.post(reverse('questionario'), respostas_do_questionario(
+            sono_horas='longo', exercicio_frequencia='nunca', protetor_solar='0'))
+        perfil = self.perfil()
+        self.assertEqual(perfil.sono_horas, 'longo')
+        self.assertEqual(perfil.exercicio_frequencia, 'nunca')
+        self.assertEqual(perfil.protetor_solar, 0)  # 0 e uma resposta valida, nao "vazio"
+
+    def test_valores_invalidos_no_primeiro_envio_ficam_com_o_padrao(self):
+        self.client.post(reverse('questionario'), respostas_do_questionario(
+            sono_horas='dormi', exercicio_frequencia='sempre', protetor_solar='9'))
+        perfil = self.perfil()
+        self.assertEqual(perfil.sono_horas, 'adequado')
+        self.assertEqual(perfil.exercicio_frequencia, '1-2x')
+        self.assertEqual(perfil.protetor_solar, 1)
+
+    def test_valores_invalidos_mantem_o_que_ja_estava(self):
+        self.client.post(reverse('questionario'), respostas_do_questionario())
+        self.client.post(reverse('questionario'), respostas_do_questionario(
+            sono_horas='dormi', exercicio_frequencia='', protetor_solar='abc'))
+        perfil = self.perfil()
+        self.assertEqual(perfil.sono_horas, 'curto')
+        self.assertEqual(perfil.exercicio_frequencia, '5x+')
+        self.assertEqual(perfil.protetor_solar, 2)
+
+    def test_objetivo_do_questionario_gera_preocupacao(self):
+        self.client.post(reverse('questionario'), respostas_do_questionario(objetivo='reduzir acne'))
+        self.assertEqual(preocupacoes_do_perfil(self.perfil(), {}), {'Acne'})
 
 
 class SegurancaTests(PerfilBaseTestCase):

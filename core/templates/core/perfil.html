@@ -61,7 +61,7 @@
                 </div>
                 <div class="resumo-info">
                     <div class="perfil-item-label">Pele {{ perfil.tipo_pele }}</div>
-                    <p>Fototipo {{ perfil.fototipo|default:'--' }} &middot; Objetivo: {{ perfil.objetivo|default:'Melhorar a pele' }}.</p>
+                    <p>Fototipo {{ perfil.fototipo|default:'--' }} &middot; Objetivo: {{ objetivo_rotulo|default:'Melhorar a pele' }}.</p>
                     <div class="resumo-acoes">
                         <a href="{% url 'scanner' %}" class="btn-perfil-secundario">Fazer novo scan</a>
                         <a href="{% url 'produtos' %}" class="btn-perfil-secundario">Ver recomendações</a>
@@ -157,8 +157,8 @@
                 <div class="campo-embutido">
                     <label for="campo-objetivo">Objetivo principal</label>
                     <select id="campo-objetivo" name="objetivo" required>
-                        {% for objetivo in objetivos %}
-                        <option value="{{ objetivo }}" {% if perfil.objetivo == objetivo %}selected{% endif %}>{{ objetivo }}</option>
+                        {% for valor, texto in objetivos %}
+                        <option value="{{ valor }}" {% if objetivo_atual == valor %}selected{% endif %}>{{ texto }}</option>
                         {% endfor %}
                     </select>
                 </div>
