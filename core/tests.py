@@ -1,9 +1,15 @@
 import json
+import os
+import tempfile
+from io import StringIO
 
+from django.conf import settings
+from django.core.management import call_command
+from django.core.management.base import CommandError
 from django.test import TestCase
 from django.urls import reverse
 
-from .models import Usuario, PerfilDermatologico
+from .models import Usuario, PerfilDermatologico, RegraTratamento
 from .recomendacao import (
     MAPA_OBJETIVO_PREOCUPACAO, OBJETIVOS, normalizar_objetivo, preocupacoes_do_perfil, rotulo_objetivo,
 )
@@ -378,3 +384,100 @@ class PrivacidadeTests(PerfilBaseTestCase):
     def test_excluir_so_aceita_post(self):
         self.client.get(reverse('excluir_conta'))
         self.assertTrue(Usuario.objects.filter(pk=self.usuario.pk).exists())
+
+
+# ==========================================================================
+# TRATAMENTO - model RegraTratamento e comando import_tratamento_csv
+# ==========================================================================
+
+CABECALHO_TRATAMENTO = (
+    'Faixa_Etária,Tipo_de_Pele,Subtipo_de_Pele,Sensibilidade,Preocupação,Tipo_Interno,'
+    'Ingredientes,Concentrações,Efeitos'
+)
+
+# 3 linhas de exemplo: acne (tipo interno), rugas ("Geral") e uma sem sensibilidade
+CSV_TRATAMENTO = f"""{CABECALHO_TRATAMENTO}
+14-18,Oleosa,Oleosa a Normal,Sim,Acne,Comedonal,PCA de Zinco + Peróxido de Benzoíla + Ácido Salicílico,0.5% + 2% + 5%,"Controla o sebo, Desobstrui os poros"
+45+,Seca,Extremamente Seca,Não,Rugas,Geral,Retinol + Ácido Hialurônico + Peptídeos,10% + 1% + 2%,Estimula o colágeno
+25-36,Mista,Zona T Oleosa e Bochechas Secas,Não,Poros Dilatados,Geral,Niacinamida + Ácido Salicílico + Argila,5% + 2% + 3%,Disfarça os poros
+"""
+
+
+def importar_tratamento(texto):
+    # o CSV real vem com BOM (utf-8-sig); os exemplos tambem, para testar isso
+    with tempfile.NamedTemporaryFile('w', suffix='.csv', delete=False, encoding='utf-8-sig') as arquivo:
+        arquivo.write(texto)
+    try:
+        saida = StringIO()
+        call_command('import_tratamento_csv', arquivo.name, stdout=saida)
+        return saida.getvalue()
+    finally:
+        os.unlink(arquivo.name)
+
+
+class ImportarTratamentoTests(TestCase):
+    def test_importa_as_linhas_do_csv(self):
+        saida = importar_tratamento(CSV_TRATAMENTO)
+        self.assertEqual(RegraTratamento.objects.count(), 3)
+        self.assertIn('3 criadas, 0 atualizadas', saida)
+
+    def test_converte_os_campos_para_o_formato_do_perfil(self):
+        importar_tratamento(CSV_TRATAMENTO)
+        acne = RegraTratamento.objects.get(preocupacao='Acne')
+        self.assertEqual(acne.faixa_etaria, '14-18')
+        self.assertEqual(acne.tipo_pele, 'oleosa')       # minusculo, como no perfil
+        self.assertIs(acne.sensibilidade, True)          # "Sim"
+        self.assertEqual(acne.tipo_interno, 'Comedonal')
+        self.assertEqual(acne.efeitos, 'Controla o sebo, Desobstrui os poros')
+        rugas = RegraTratamento.objects.get(preocupacao='Rugas')
+        self.assertIs(rugas.sensibilidade, False)        # "Não"
+        self.assertEqual(rugas.tipo_interno, '')         # "Geral" vira vazio
+
+    def test_rodar_duas_vezes_nao_duplica(self):
+        importar_tratamento(CSV_TRATAMENTO)
+        saida = importar_tratamento(CSV_TRATAMENTO)
+        self.assertEqual(RegraTratamento.objects.count(), 3)
+        self.assertIn('0 criadas, 3 atualizadas', saida)
+
+    def test_reimportar_atualiza_os_ingredientes(self):
+        importar_tratamento(CSV_TRATAMENTO)
+        importar_tratamento(CSV_TRATAMENTO.replace('Estimula o colágeno', 'Efeito novo'))
+        self.assertEqual(RegraTratamento.objects.get(preocupacao='Rugas').efeitos, 'Efeito novo')
+        self.assertEqual(RegraTratamento.objects.count(), 3)
+
+    def test_concentracoes_nao_sao_importadas(self):
+        importar_tratamento(CSV_TRATAMENTO)
+        campos = {campo.name for campo in RegraTratamento._meta.get_fields()}
+        self.assertFalse(any('concentra' in campo for campo in campos))
+        for regra in RegraTratamento.objects.all():
+            self.assertNotIn('%', regra.ingredientes + regra.efeitos)
+
+    def test_lista_ingredientes(self):
+        importar_tratamento(CSV_TRATAMENTO)
+        regra = RegraTratamento.objects.get(preocupacao='Rugas')
+        self.assertEqual(regra.lista_ingredientes(), ['Retinol', 'Ácido Hialurônico', 'Peptídeos'])
+
+    def test_arquivo_inexistente(self):
+        with self.assertRaises(CommandError):
+            call_command('import_tratamento_csv', '/caminho/que/nao/existe.csv')
+
+    def test_csv_sem_coluna_obrigatoria(self):
+        with self.assertRaises(CommandError):
+            importar_tratamento('Faixa_Etária,Tipo_de_Pele\n14-18,Oleosa\n')
+
+    def test_sensibilidade_invalida_nao_importa_nada(self):
+        linhas = CSV_TRATAMENTO.splitlines()
+        linhas[3] = linhas[3].replace(',Não,Poros', ',Talvez,Poros')
+        with self.assertRaises(CommandError):
+            importar_tratamento('\n'.join(linhas))
+        self.assertEqual(RegraTratamento.objects.count(), 0)  # tudo ou nada
+
+    def test_dataset_completo_tem_1120_regras(self):
+        caminho = os.path.join(settings.BASE_DIR, 'core', 'data', 'tratamento_skincare.csv')
+        call_command('import_tratamento_csv', caminho, stdout=StringIO())
+        self.assertEqual(RegraTratamento.objects.count(), 1120)
+        call_command('import_tratamento_csv', caminho, stdout=StringIO())
+        self.assertEqual(RegraTratamento.objects.count(), 1120)
+        # nenhuma regra com tipo de pele fora dos valores do perfil
+        tipos = set(RegraTratamento.objects.values_list('tipo_pele', flat=True))
+        self.assertEqual(tipos, {'normal', 'seca', 'oleosa', 'mista'})
