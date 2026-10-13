@@ -480,6 +480,24 @@ def _foto_valida(arquivo):
     return True
 
 
+# '1'/'sim' -> True, '0'/'nao' -> False. Qualquer outra coisa -> None (nao respondeu / valor invalido)
+def _sim_nao(valor):
+    if valor in ('1', 'sim'):
+        return True
+    if valor in ('0', 'nao'):
+        return False
+    return None
+
+
+# tipo de acne so vale quando o objetivo e "reduzir acne". "Nao sei" (vazio ou qualquer valor
+# desconhecido) vira '' e a rotina usa Comedonal com aviso. `atual` e o valor a manter se o formulario nao enviou o campo
+def _tipo_acne_valido(enviado, atual, objetivo):
+    valor = atual if enviado is None else enviado
+    if normalizar_objetivo(objetivo) == 'reduzir acne' and valor in dict(PerfilDermatologico.TIPO_ACNE_CHOICES):
+        return valor
+    return ''
+
+
 # converte para int sem estourar erro 500 quando o valor vem vazio, texto ou fora da faixa
 def _inteiro(valor, padrao=0, minimo=None, maximo=None):
     try:
@@ -565,6 +583,9 @@ def tela_questionario(request):
         sono_horas = request.POST.get('sono_horas')
         exercicio_frequencia = request.POST.get('exercicio_frequencia')
         protetor_solar = _inteiro(request.POST.get('protetor_solar'), None, 0, 2)  # None = nao respondeu
+        sensibilidade = _sim_nao(request.POST.get('sensibilidade'))
+        gestante = _sim_nao(request.POST.get('gestante'))
+        tipo_acne = request.POST.get('tipo_acne')
 
         # "Outro": guarda o texto que a pessoa digitou no lugar da palavra "outro"
         if objective == 'outro':
@@ -645,6 +666,11 @@ def tela_questionario(request):
                 perfil.exercicio_frequencia = exercicio_frequencia
             if protetor_solar is not None:
                 perfil.protetor_solar = protetor_solar
+            if sensibilidade is not None:
+                perfil.sensibilidade = sensibilidade
+            if gestante is not None:
+                perfil.gestante = gestante
+            perfil.tipo_acne = _tipo_acne_valido(tipo_acne, perfil.tipo_acne, perfil.objetivo)
             perfil.porcentagem_saude = porcentagem_calculada
             # so troca a analise se houve scan novo
             if dados_ia_json:
@@ -1065,6 +1091,9 @@ def editar_perfil(request):
     objetivo = normalizar_objetivo(request.POST.get('objetivo'))  # grava o mesmo codigo do questionario
     preferencia_produto = request.POST.get('preferencia_produto')
     usa_maquiagem_diariamente = request.POST.get('usa_maquiagem_diariamente')
+    sensibilidade = _sim_nao(request.POST.get('sensibilidade'))
+    gestante = _sim_nao(request.POST.get('gestante'))
+    tipo_acne = request.POST.get('tipo_acne')
 
     if tipo_pele in dict(PerfilDermatologico.TIPO_PELE_CHOICES):
         perfil.tipo_pele = tipo_pele
@@ -1075,6 +1104,11 @@ def editar_perfil(request):
         perfil.preferencia_produto = preferencia_produto
     if usa_maquiagem_diariamente in ('sim', 'nao'):
         perfil.usa_maquiagem_diariamente = usa_maquiagem_diariamente
+    if sensibilidade is not None:
+        perfil.sensibilidade = sensibilidade
+    if gestante is not None:
+        perfil.gestante = gestante
+    perfil.tipo_acne = _tipo_acne_valido(tipo_acne, perfil.tipo_acne, perfil.objetivo)
 
     perfil.save()
     messages.success(request, 'Perfil de pele atualizado. As recomendações já usam as novas respostas.')

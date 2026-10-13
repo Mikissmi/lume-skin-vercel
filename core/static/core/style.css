@@ -454,7 +454,8 @@ body.body {
 
 /* Campos condicionais (aparecem via JS) se ajustando abaixo do campo principal */
 .form-bloco input[name="descricaoalergia"],
-.form-bloco input[name="objetivo_outro"] {
+.form-bloco input[name="objetivo_outro"],
+.form-bloco #bloco-tipo-acne {
     margin-top: 16px;
 }
 

@@ -82,6 +82,16 @@ class PerfilDermatologico(models.Model):
     ]
     exercicio_frequencia = models.CharField(max_length=10, choices=EXERCICIO_CHOICES, default='1-2x')
 
+    # Usadas pela rotina de tratamento (recomendacao.py). Padrao False = quem
+    # respondeu o questionario antes dessas perguntas continua funcionando.
+    sensibilidade = models.BooleanField(default=False)  # pele sensivel (arde/avermelha com facilidade)
+    gestante = models.BooleanField(default=False)
+
+    # Mesmos nomes do dataset de tratamento (coluna Tipo_Interno). Vazio = "nao sei":
+    # a rotina usa Comedonal (o mais leve) e avisa para procurar um dermatologista.
+    TIPO_ACNE_CHOICES = [(t, t) for t in ['Comedonal', 'Inflamatória', 'Nodular', 'Cística']]
+    tipo_acne = models.CharField(max_length=20, choices=TIPO_ACNE_CHOICES, blank=True, default='')
+
     foto_rosto = models.CharField(max_length=500, blank=True, null=True)
     dados_ia = models.TextField(blank=True, null=True)
 

@@ -171,6 +171,38 @@
                     </div>
                 </div>
 
+                <!-- aparece so com o objetivo "Reduzir acne" (js abaixo). "Não sei" = vazio -->
+                <div class="campo-embutido" id="campo-tipo-acne" {% if objetivo_atual != 'reduzir acne' %}hidden{% endif %}>
+                    <label for="tipo_acne">Tipo de acne</label>
+                    <select id="tipo_acne" name="tipo_acne">
+                        <option value="" {% if not perfil.tipo_acne %}selected{% endif %}>Não sei</option>
+                        <option value="Comedonal" {% if perfil.tipo_acne == 'Comedonal' %}selected{% endif %}>Comedonal: cravos brancos e pretos</option>
+                        <option value="Inflamatória" {% if perfil.tipo_acne == 'Inflamatória' %}selected{% endif %}>Inflamatória: espinhas vermelhas, com pus</option>
+                        <option value="Nodular" {% if perfil.tipo_acne == 'Nodular' %}selected{% endif %}>Nodular: caroços duros e doloridos sob a pele</option>
+                        <option value="Cística" {% if perfil.tipo_acne == 'Cística' %}selected{% endif %}>Cística: bolsas grandes, profundas e dolorosas</option>
+                    </select>
+                </div>
+
+                <div class="campo-embutido">
+                    <fieldset class="campo-grupo">
+                        <legend>Sua pele é sensível?</legend>
+                        <div class="segmentado">
+                            <label><input type="radio" name="sensibilidade" value="sim" {% if perfil.sensibilidade %}checked{% endif %}><span>Sim</span></label>
+                            <label><input type="radio" name="sensibilidade" value="nao" {% if not perfil.sensibilidade %}checked{% endif %}><span>Não</span></label>
+                        </div>
+                    </fieldset>
+                </div>
+
+                <div class="campo-embutido">
+                    <fieldset class="campo-grupo">
+                        <legend>Está grávida?</legend>
+                        <div class="segmentado">
+                            <label><input type="radio" name="gestante" value="sim" {% if perfil.gestante %}checked{% endif %}><span>Sim</span></label>
+                            <label><input type="radio" name="gestante" value="nao" {% if not perfil.gestante %}checked{% endif %}><span>Não</span></label>
+                        </div>
+                    </fieldset>
+                </div>
+
                 <div class="campo-embutido">
                     <fieldset class="campo-grupo">
                         <legend>Textura preferida</legend>
@@ -417,6 +449,17 @@
         lerCampo();
         desenhar();
     });
+
+    // tipo de acne so aparece quando o objetivo e "Reduzir acne" (fora disso volta para "Não sei")
+    var selectObjetivo = document.getElementById('campo-objetivo');
+    var campoTipoAcne = document.getElementById('campo-tipo-acne');
+    if (selectObjetivo && campoTipoAcne) {
+        selectObjetivo.addEventListener('change', function () {
+            var eAcne = selectObjetivo.value === 'reduzir acne';
+            campoTipoAcne.hidden = !eAcne;
+            if (!eAcne) { document.getElementById('tipo_acne').value = ''; }
+        });
+    }
 
     // janela de confirmacao da exclusao de conta
     var dialogo = document.getElementById('dialogo-excluir-conta');

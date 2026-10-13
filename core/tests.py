@@ -251,7 +251,7 @@ def respostas_do_questionario(**mudancas):
     return respostas
 
 
-class QuestionarioTests(TestCase):
+class QuestionarioBase(TestCase):
     def setUp(self):
         self.usuario = Usuario.objects.create_user(email='nova@email.com', nome_usuario='Nova', password=SENHA)
         self.client.login(username='nova@email.com', password=SENHA)
@@ -259,6 +259,8 @@ class QuestionarioTests(TestCase):
     def perfil(self):
         return PerfilDermatologico.objects.get(usuario=self.usuario)
 
+
+class QuestionarioTests(QuestionarioBase):
     def test_primeiro_envio_salva_sono_exercicio_protetor_e_objetivo(self):
         resposta = self.client.post(reverse('questionario'), respostas_do_questionario())
         self.assertRedirects(resposta, reverse('dashboard'))
@@ -297,6 +299,121 @@ class QuestionarioTests(TestCase):
     def test_objetivo_do_questionario_gera_preocupacao(self):
         self.client.post(reverse('questionario'), respostas_do_questionario(objetivo='reduzir acne'))
         self.assertEqual(preocupacoes_do_perfil(self.perfil(), {}), {'Acne'})
+
+
+class NovasPerguntasQuestionarioTests(QuestionarioBase):
+    def test_salva_sensibilidade_gestante_e_tipo_acne(self):
+        self.client.post(reverse('questionario'), respostas_do_questionario(
+            sensibilidade='1', gestante='1', tipo_acne='Nodular'))
+        perfil = self.perfil()
+        self.assertIs(perfil.sensibilidade, True)
+        self.assertIs(perfil.gestante, True)
+        self.assertEqual(perfil.tipo_acne, 'Nodular')
+
+    def test_respostas_nao_salvam_false(self):
+        self.client.post(reverse('questionario'), respostas_do_questionario(sensibilidade='0', gestante='0'))
+        perfil = self.perfil()
+        self.assertIs(perfil.sensibilidade, False)
+        self.assertIs(perfil.gestante, False)
+
+    def test_nao_sei_no_tipo_de_acne_fica_vazio(self):
+        self.client.post(reverse('questionario'), respostas_do_questionario(tipo_acne='nao-sei'))
+        self.assertEqual(self.perfil().tipo_acne, '')
+
+    def test_tipo_de_acne_invalido_fica_vazio(self):
+        self.client.post(reverse('questionario'), respostas_do_questionario(tipo_acne='grave'))
+        self.assertEqual(self.perfil().tipo_acne, '')
+
+    def test_tipo_de_acne_so_vale_com_objetivo_acne(self):
+        self.client.post(reverse('questionario'), respostas_do_questionario(
+            objetivo='hidratar', tipo_acne='Cística'))
+        self.assertEqual(self.perfil().tipo_acne, '')
+
+    def test_sem_os_campos_novos_usa_o_padrao(self):
+        # formulario antigo / requisicao sem as perguntas novas
+        self.client.post(reverse('questionario'), respostas_do_questionario())
+        perfil = self.perfil()
+        self.assertIs(perfil.sensibilidade, False)
+        self.assertIs(perfil.gestante, False)
+        self.assertEqual(perfil.tipo_acne, '')
+
+    def test_responder_de_novo_sem_os_campos_novos_mantem_o_que_ja_estava(self):
+        self.client.post(reverse('questionario'), respostas_do_questionario(
+            sensibilidade='1', gestante='1', tipo_acne='Inflamatória'))
+        self.client.post(reverse('questionario'), respostas_do_questionario())
+        perfil = self.perfil()
+        self.assertIs(perfil.sensibilidade, True)
+        self.assertIs(perfil.gestante, True)
+        self.assertEqual(perfil.tipo_acne, 'Inflamatória')
+
+    def test_questionario_mostra_as_perguntas_novas(self):
+        resposta = self.client.get(reverse('questionario'))
+        for texto in ('name="sensibilidade"', 'name="gestante"', 'name="tipo_acne"'):
+            self.assertContains(resposta, texto)
+        for tipo in PerfilDermatologico.TIPO_ACNE_CHOICES:
+            self.assertContains(resposta, f'<option value="{tipo[0]}">')
+
+
+class NovasPerguntasPerfilTests(PerfilBaseTestCase):
+    def test_usuario_antigo_tem_os_padroes_e_a_tela_abre(self):
+        self.assertIs(self.perfil.sensibilidade, False)
+        self.assertIs(self.perfil.gestante, False)
+        self.assertEqual(self.perfil.tipo_acne, '')
+        resposta = self.client.get(reverse('perfil'), {'aba': 'pele'})
+        self.assertEqual(resposta.status_code, 200)
+
+    def test_edita_sensibilidade_e_gestante(self):
+        self.client.post(reverse('editar_perfil'), {'sensibilidade': 'sim', 'gestante': 'sim'})
+        self.perfil.refresh_from_db()
+        self.assertIs(self.perfil.sensibilidade, True)
+        self.assertIs(self.perfil.gestante, True)
+        self.client.post(reverse('editar_perfil'), {'sensibilidade': 'nao', 'gestante': 'nao'})
+        self.perfil.refresh_from_db()
+        self.assertIs(self.perfil.sensibilidade, False)
+        self.assertIs(self.perfil.gestante, False)
+
+    def test_valor_invalido_de_sensibilidade_e_ignorado(self):
+        self.perfil.sensibilidade = True
+        self.perfil.save()
+        self.client.post(reverse('editar_perfil'), {'sensibilidade': 'talvez', 'gestante': ''})
+        self.perfil.refresh_from_db()
+        self.assertIs(self.perfil.sensibilidade, True)
+        self.assertIs(self.perfil.gestante, False)
+
+    def test_edita_tipo_de_acne_com_objetivo_acne(self):
+        self.client.post(reverse('editar_perfil'), {'objetivo': 'reduzir acne', 'tipo_acne': 'Cística'})
+        self.perfil.refresh_from_db()
+        self.assertEqual(self.perfil.tipo_acne, 'Cística')
+        # "Não sei" volta para vazio
+        self.client.post(reverse('editar_perfil'), {'objetivo': 'reduzir acne', 'tipo_acne': ''})
+        self.perfil.refresh_from_db()
+        self.assertEqual(self.perfil.tipo_acne, '')
+
+    def test_trocar_o_objetivo_limpa_o_tipo_de_acne(self):
+        self.client.post(reverse('editar_perfil'), {'objetivo': 'reduzir acne', 'tipo_acne': 'Nodular'})
+        self.client.post(reverse('editar_perfil'), {'objetivo': 'hidratar'})  # sem o campo no POST
+        self.perfil.refresh_from_db()
+        self.assertEqual(self.perfil.tipo_acne, '')
+
+    def test_editar_outros_campos_nao_apaga_o_tipo_de_acne(self):
+        self.client.post(reverse('editar_perfil'), {'objetivo': 'reduzir acne', 'tipo_acne': 'Nodular'})
+        self.client.post(reverse('editar_perfil'), {'tipo_pele': 'seca'})  # objetivo e acne nao enviados
+        self.perfil.refresh_from_db()
+        self.assertEqual(self.perfil.tipo_acne, 'Nodular')
+
+    def test_aba_mostra_os_valores_salvos(self):
+        self.perfil.sensibilidade = True
+        self.perfil.objetivo = 'reduzir acne'
+        self.perfil.tipo_acne = 'Nodular'
+        self.perfil.save()
+        resposta = self.client.get(reverse('perfil'), {'aba': 'pele'})
+        self.assertContains(resposta, '<input type="radio" name="sensibilidade" value="sim" checked>', html=True)
+        self.assertContains(resposta, 'value="Nodular" selected')
+        self.assertNotContains(resposta, 'id="campo-tipo-acne" hidden')
+
+    def test_campo_de_acne_fica_escondido_com_outro_objetivo(self):
+        resposta = self.client.get(reverse('perfil'), {'aba': 'pele'})
+        self.assertContains(resposta, 'id="campo-tipo-acne" hidden')
 
 
 class SegurancaTests(PerfilBaseTestCase):
