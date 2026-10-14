@@ -1849,48 +1849,6 @@ body.body:has(.sidebar) {
     color: #a46fd2;
 }
 
-/* Alerta de UV */
-.box-alerta-uv {
-    display: flex;
-    align-items: center;
-    background: #ffeadf;
-    border: 1px solid #e8af8e;
-    border-radius: 20px;
-    padding: 20px 32px;
-    margin-bottom: 24px;
-    flex-wrap: wrap;
-    gap: 16px;
-    transition: box-shadow 0.25s ease, transform 0.25s ease;
-}
-
-.box-alerta-uv:hover {
-    box-shadow: 0 8px 30px rgba(255, 106, 19, 0.35);
-    transform: translateY(-2px);
-}
-
-.alerta-texto {
-    display: flex;
-    gap: 12px;
-    align-items: flex-start;
-}
-
-.icone-alerta {
-    font-size: 20px;
-    color: #ff6a13;
-}
-
-.alerta-texto strong {
-    font-size: 14px;
-    color: #0b132a;
-    display: block;
-    margin-bottom: 2px;
-}
-
-.alerta-texto p {
-    font-size: 13px;
-    color: #718096;
-}
-
 .filtros-rotina {
     margin-bottom: 12px;
     margin-top: 50px;

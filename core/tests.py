@@ -1115,3 +1115,18 @@ class DashboardFototipoTests(PerfilBaseTestCase):
 
     def test_sem_perfil_nao_tem_card(self):
         self.assertIsNone(_fototipo_do_perfil(None))
+
+
+class TelaProdutosTests(PerfilBaseTestCase):
+    def test_nao_mostra_o_alerta_de_uv(self):
+        resposta = self.client.get(reverse('produtos'))
+        self.assertEqual(resposta.status_code, 200)
+        self.assertNotContains(resposta, 'níveis de UV')
+        self.assertNotContains(resposta, 'box-alerta-uv')
+
+    def test_continua_mostrando_objetivo_e_filtros(self):
+        criar_produto('Gel de Limpeza', 'Limpeza', 'Glicerina', tipo_pele='Mista')
+        resposta = self.client.get(reverse('produtos'))
+        self.assertContains(resposta, 'Controlar oleosidade')
+        self.assertContains(resposta, 'Rotina completa')
+        self.assertContains(resposta, 'Gel de Limpeza')
