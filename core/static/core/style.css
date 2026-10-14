@@ -831,7 +831,7 @@ body.body:has(.sidebar) {
     display: grid;
     grid-template-columns: 2fr 1fr;
     gap: 24px;
-    align-items: start;
+    align-items: stretch; /* os dois cards de cima (Saude da Pele e Fototipo) sempre com a mesma altura */
 }
 
 /* Estilo Base de todos os Cards */
@@ -952,13 +952,14 @@ body.body:has(.sidebar) {
 .card.perfil {
     display: flex;
     flex-direction: column;
+    padding: 24px 32px; /* menos espaco em cima/embaixo: o card cabe na altura do card Saude da Pele */
 }
 
 .card.perfil h2 {
     font-size: 18px;
     font-weight: 700;
     color: #0b132a;
-    margin-bottom: 16px;
+    margin-bottom: 10px;
 }
 
 /* Fototipo: algarismo romano grande + "escala Fitzpatrick" ao lado */
@@ -966,11 +967,11 @@ body.body:has(.sidebar) {
     display: flex;
     align-items: baseline;
     gap: 10px;
-    margin-bottom: 16px;
+    margin-bottom: 8px;
 }
 
 .fototipo-numero {
-    font-size: 56px;
+    font-size: 32px;
     font-weight: 800;
     color: #7c4dbd;
     line-height: 1;
@@ -978,7 +979,7 @@ body.body:has(.sidebar) {
 }
 
 .fototipo-linha small {
-    font-size: 15px;
+    font-size: 14px;
     color: #5a6478;
     font-weight: 700;
 }
@@ -987,7 +988,7 @@ body.body:has(.sidebar) {
 .fototipo-escala {
     display: flex;
     gap: 8px;
-    margin: 0 0 20px;
+    margin: 0 0 10px;
     padding: 4px;
     list-style: none;
 }
@@ -1004,10 +1005,21 @@ body.body:has(.sidebar) {
 }
 
 .card.perfil p {
-    font-size: 14px;
-    line-height: 1.6;
+    font-size: 13px;
+    line-height: 1.5;
     color: #5a6478;
     margin-bottom: 0;
+}
+
+/* Telas medias: a coluna do Fototipo fica estreita e o texto ocupa mais linhas, entao o card fica mais compacto */
+@media (max-width: 1200px) {
+    .card.perfil {
+        padding: 18px 22px;
+    }
+
+    .fototipo-numero {
+        font-size: 28px;
+    }
 }
 
 /* ==========================================================================
@@ -1069,20 +1081,49 @@ body.body:has(.sidebar) {
 .card-rotina-diaria {
     display: flex;
     flex-direction: column;
-    gap: 24px;
+    gap: 18px;
     background: #ffffff;
+}
+
+/* titulo + contador + seletor Manha/Noite, e a barra de progresso logo abaixo */
+.status-topo {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
 }
 
 .status-cabecalho {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 12px;
 }
 
 .status-cabecalho h3 {
     font-size: 18px;
     font-weight: 700;
     color: #0b132a;
+}
+
+.rotina-contador {
+    margin: 2px 0 0;
+    font-size: 12px;
+    color: #5f6e85;
+}
+
+/* Barra de progresso da rotina (roxo do app sobre um trilho cinza claro) */
+.rotina-progresso {
+    height: 6px;
+    border-radius: 999px;
+    background-color: #edf0f5;
+    overflow: hidden;
+}
+.rotina-progresso span {
+    display: block;
+    height: 100%;
+    border-radius: 999px;
+    background-color: #7c4dbd;
+    transition: width 0.3s ease;
 }
 
 /* Seletor Manhã / Noite - usa .btn tambem, entao aqui reseta o que
@@ -1132,83 +1173,111 @@ body.body:has(.sidebar) {
 .rotina-item {
     display: flex;
     align-items: center;
-    padding: 16px 24px;
-    border-radius: 16px;
-    border: 1px solid #edf2f7;
+    gap: 14px;
+    padding: 13px 20px;
+    border-radius: 14px;
+    border: 1px solid #e6eaf1;
     background-color: #ffffff;
-    transition: background-color 0.2s ease;
+    cursor: pointer; /* o passo inteiro e clicavel (marca/desmarca como feito) */
+    transition: background-color 0.2s ease, border-color 0.2s ease;
 }
 
 .rotina-details {
     flex: 1;
-    margin-left: 16px;
+    min-width: 0;
 }
 
 .rotina-details strong {
     display: block;
     font-size: 14px;
-    color: #2d3748;
+    color: #0b132a;
     font-weight: 600;
 }
 
 .rotina-details span {
     font-size: 12px;
-    color: #718096;
+    color: #5f6e85;
 }
 
-/* Bolinha de status de cada item da rotina */
+/* Bolinha de status de cada item da rotina (e um <button>: funciona com teclado e leitor de tela) */
 .rotina-item .status {
-    width: 22px;
-    height: 22px;
-    min-width: 22px;
+    width: 24px;
+    height: 24px;
+    min-width: 24px;
+    padding: 0;
     border-radius: 50%;
-    border: 2px solid #cbd5e0;
+    border: 2px solid #c5ccd9;
+    background-color: #ffffff;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 10px;
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 1;
+    cursor: pointer;
     transition: all 0.2s ease;
 }
-
-/* Customização baseada no estado de cada item */
-/* 1. Item Concluído (Verde) */
-.rotina-item.completed {
-    background-color: #f7fafc; /* Levemente opaco */
-}
-.rotina-item.completed .status {
-    background-color: #e6f9f0;
-    border-color: #10b981;
-    color: #10b981;
-}
-.rotina-item.completed .rotina-details strong {
-    text-decoration: line-through;
-    color: #a0aec0;
-}
-.rotina-time {
-    font-size: 13px;
-    color: #a0aec0;
-    font-weight: 500;
+.rotina-item .status:focus-visible {
+    outline: 2px solid #7c4dbd;
+    outline-offset: 2px;
 }
 
-/* 2. Item Fazer Agora (Azul, pra combinar com o roxo/azul do resto do app) */
+/* Tres estados do passo:
+   1. Pendente (os passos depois do proximo): branco, bolinha cinza */
+.rotina-item.pending:hover {
+    border-color: #c5ccd9;
+}
+
+/* 2. Proximo passo (azul claro, bolinha azul e botao "Marcar como feito") */
 .rotina-item.action-required {
-    background-color: #f5faff;
-    border-color: #dcedfb;
+    background-color: #e7f4fb;
+    border-color: #cfe8f5;
 }
 .rotina-item.action-required .status {
     border-color: #0d7cb3;
-    background-color: #ffffff;
 }
-.rotina-action {
-    font-size: 13px;
+.rotina-botao {
+    flex: none;
+    padding: 8px 16px;
+    border-radius: 8px;
+    background-color: #0d7cb3;
+    color: #ffffff;
+    font-size: 12px;
     font-weight: 700;
-    color: #0d7cb3;
-    cursor: pointer;
+    white-space: nowrap;
 }
 
-/* 3. Item Pendente (Borda Padrão) */
-.rotina-item.pending .status {
-    border-color: #cbd5e0;
+/* 3. Feito (cinza bem claro, bolinha verde com check e titulo riscado) */
+.rotina-item.completed {
+    background-color: #fafbfd;
+    border-color: #f0f2f7;
+}
+.rotina-item.completed .status {
+    background-color: #0f8f66;
+    border-color: #0f8f66;
+    color: #ffffff;
+}
+.rotina-item.completed .rotina-details strong {
+    text-decoration: line-through;
+    color: #5a6478;
+}
+
+/* Celular: passo e botao um pouco menores para caberem lado a lado */
+@media (max-width: 480px) {
+    .status-cabecalho {
+        flex-wrap: wrap;
+    }
+    .rotina-item {
+        flex-wrap: wrap;
+        padding: 12px 14px;
+        gap: 10px;
+    }
+    /* o botao desce para uma linha propria, para o nome do produto nao ficar espremido */
+    .rotina-botao {
+        flex: 1 1 100%;
+        padding: 8px 10px;
+        text-align: center;
+    }
 }
 
 /* Produto da rotina: o texto e um link para a tela de detalhe */
@@ -1221,7 +1290,7 @@ body.body:has(.sidebar) {
     text-decoration: underline;
 }
 
-/* Avisos da rotina (abaixo da lista). .destaque = ex.: acne nodular/cistica */
+/* Avisos da rotina (dentro do card, abaixo da lista). .destaque = ex.: acne nodular/cistica */
 .rotina-avisos {
     display: flex;
     flex-direction: column;
@@ -1232,8 +1301,8 @@ body.body:has(.sidebar) {
     margin: 0;
     padding: 10px 14px;
     border-radius: 12px;
-    background-color: #f7fafc;
-    border: 1px solid #edf2f7;
+    background-color: #eef2f7;
+    border: 1px solid #d5dde8;
     font-size: 12px;
     line-height: 1.5;
     color: #4a5568;
@@ -1244,10 +1313,20 @@ body.body:has(.sidebar) {
     color: #c53030;
     font-weight: 600;
 }
-.rotina-aviso.fixo {
-    background-color: transparent;
-    border-style: dashed;
-    font-style: italic;
+
+.rotina-erro {
+    margin: 12px 0 0;
+    font-size: 12px;
+    color: #c53030;
+}
+
+/* Nota fixa FORA do card: pequena e mais transparente */
+.rotina-nota {
+    margin: 14px 8px 0;
+    font-size: 11px;
+    line-height: 1.5;
+    color: #4a5568;
+    opacity: 0.65;
 }
 
 /* ==========================================================================
@@ -1847,48 +1926,6 @@ body.body:has(.sidebar) {
     background: #f8edff;
     border-color: rgba(164, 111, 210, 0.3);
     color: #a46fd2;
-}
-
-/* Alerta de UV */
-.box-alerta-uv {
-    display: flex;
-    align-items: center;
-    background: #ffeadf;
-    border: 1px solid #e8af8e;
-    border-radius: 20px;
-    padding: 20px 32px;
-    margin-bottom: 24px;
-    flex-wrap: wrap;
-    gap: 16px;
-    transition: box-shadow 0.25s ease, transform 0.25s ease;
-}
-
-.box-alerta-uv:hover {
-    box-shadow: 0 8px 30px rgba(255, 106, 19, 0.35);
-    transform: translateY(-2px);
-}
-
-.alerta-texto {
-    display: flex;
-    gap: 12px;
-    align-items: flex-start;
-}
-
-.icone-alerta {
-    font-size: 20px;
-    color: #ff6a13;
-}
-
-.alerta-texto strong {
-    font-size: 14px;
-    color: #0b132a;
-    display: block;
-    margin-bottom: 2px;
-}
-
-.alerta-texto p {
-    font-size: 13px;
-    color: #718096;
 }
 
 .filtros-rotina {
