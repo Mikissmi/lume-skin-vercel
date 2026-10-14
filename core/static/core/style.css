@@ -831,7 +831,7 @@ body.body:has(.sidebar) {
     display: grid;
     grid-template-columns: 2fr 1fr;
     gap: 24px;
-    align-items: start;
+    align-items: stretch; /* os dois cards de cima (Saude da Pele e Fototipo) sempre com a mesma altura */
 }
 
 /* Estilo Base de todos os Cards */
@@ -1134,9 +1134,10 @@ body.body:has(.sidebar) {
     align-items: center;
     padding: 16px 24px;
     border-radius: 16px;
-    border: 1px solid #edf2f7;
-    background-color: #ffffff;
-    transition: background-color 0.2s ease;
+    border: 1px solid #e2e8f0;
+    background-color: #f8fafc;
+    cursor: pointer; /* o passo inteiro e clicavel (marca/desmarca como feito) */
+    transition: background-color 0.2s ease, border-color 0.2s ease;
 }
 
 .rotina-details {
@@ -1156,59 +1157,60 @@ body.body:has(.sidebar) {
     color: #718096;
 }
 
-/* Bolinha de status de cada item da rotina */
+/* Bolinha de status de cada item da rotina (e um <button>: funciona com teclado e leitor de tela) */
 .rotina-item .status {
-    width: 22px;
-    height: 22px;
-    min-width: 22px;
+    width: 24px;
+    height: 24px;
+    min-width: 24px;
+    padding: 0;
     border-radius: 50%;
     border: 2px solid #cbd5e0;
+    background-color: #ffffff;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 10px;
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 1;
+    cursor: pointer;
     transition: all 0.2s ease;
 }
-
-/* Customização baseada no estado de cada item */
-/* 1. Item Concluído (Verde) */
-.rotina-item.completed {
-    background-color: #f7fafc; /* Levemente opaco */
-}
-.rotina-item.completed .status {
-    background-color: #e6f9f0;
-    border-color: #10b981;
-    color: #10b981;
-}
-.rotina-item.completed .rotina-details strong {
-    text-decoration: line-through;
-    color: #a0aec0;
-}
-.rotina-time {
-    font-size: 13px;
-    color: #a0aec0;
-    font-weight: 500;
+.rotina-item .status:focus-visible {
+    outline: 2px solid #7c4dbd;
+    outline-offset: 2px;
 }
 
-/* 2. Item Fazer Agora (Azul, pra combinar com o roxo/azul do resto do app) */
+/* Cores dos passos: cada estado tem um tom proprio, bem diferente do branco do card
+   1. A fazer (azul) */
 .rotina-item.action-required {
-    background-color: #f5faff;
-    border-color: #dcedfb;
+    background-color: #eaf4fc;
+    border-color: #b9d8ee;
 }
 .rotina-item.action-required .status {
     border-color: #0d7cb3;
-    background-color: #ffffff;
 }
+.rotina-item.action-required:hover {
+    border-color: #0d7cb3;
+}
+
+/* 2. Feito (verde, com check) */
+.rotina-item.completed {
+    background-color: #e6f7ee;
+    border-color: #9fdcbd;
+}
+.rotina-item.completed .status {
+    background-color: #10b981;
+    border-color: #10b981;
+    color: #ffffff;
+}
+.rotina-item.completed:hover {
+    border-color: #10b981;
+}
+
 .rotina-action {
     font-size: 13px;
     font-weight: 700;
     color: #0d7cb3;
-    cursor: pointer;
-}
-
-/* 3. Item Pendente (Borda Padrão) */
-.rotina-item.pending .status {
-    border-color: #cbd5e0;
 }
 
 /* Produto da rotina: o texto e um link para a tela de detalhe */
@@ -1221,7 +1223,7 @@ body.body:has(.sidebar) {
     text-decoration: underline;
 }
 
-/* Avisos da rotina (abaixo da lista). .destaque = ex.: acne nodular/cistica */
+/* Avisos da rotina (dentro do card, abaixo da lista). .destaque = ex.: acne nodular/cistica */
 .rotina-avisos {
     display: flex;
     flex-direction: column;
@@ -1232,8 +1234,8 @@ body.body:has(.sidebar) {
     margin: 0;
     padding: 10px 14px;
     border-radius: 12px;
-    background-color: #f7fafc;
-    border: 1px solid #edf2f7;
+    background-color: #eef2f7;
+    border: 1px solid #d5dde8;
     font-size: 12px;
     line-height: 1.5;
     color: #4a5568;
@@ -1244,10 +1246,20 @@ body.body:has(.sidebar) {
     color: #c53030;
     font-weight: 600;
 }
-.rotina-aviso.fixo {
-    background-color: transparent;
-    border-style: dashed;
-    font-style: italic;
+
+.rotina-erro {
+    margin: 12px 0 0;
+    font-size: 12px;
+    color: #c53030;
+}
+
+/* Nota fixa FORA do card: pequena e mais transparente */
+.rotina-nota {
+    margin: 14px 8px 0;
+    font-size: 11px;
+    line-height: 1.5;
+    color: #4a5568;
+    opacity: 0.65;
 }
 
 /* ==========================================================================

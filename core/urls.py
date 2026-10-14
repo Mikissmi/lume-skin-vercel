@@ -20,6 +20,7 @@ urlpatterns = [
     # Rota para o Dashboard (que criamos nos passos anteriores)
     # Certifique-se de que a função 'dashboard_view' exista no seu views.py
     path('dashboard/', views.dashboard_view, name='dashboard'),
+    path('rotina/marcar/', views.rotina_marcar, name='rotina_marcar'),
 
     # Rota para a página do scanner
     path('scanner/', views.tela_scanner, name='scanner'),

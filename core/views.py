@@ -9,10 +9,11 @@ from django.http import JsonResponse
 from django.urls import reverse
 from django.utils import timezone
 from functools import wraps
-from .models import Usuario, PerfilDermatologico, Artigo, Especialista, Produto
+from .models import Usuario, PerfilDermatologico, Artigo, Especialista, Produto, PassoRotinaFeito
 from .youcam_utils import _extract_score
 from .recomendacao import (
-    OBJETIVOS, recomendar_produtos, classificar_indicador, montar_rotina, normalizar_objetivo, rotulo_objetivo,
+    AVISO_ROTULO, OBJETIVOS, recomendar_produtos, classificar_indicador, montar_rotina, normalizar_objetivo,
+    rotulo_objetivo,
 )
 import requests
 import io
@@ -659,12 +660,23 @@ def _fototipo_do_perfil(perfil):
     }
 
 
-# o JS do dashboard redesenha a lista ao trocar de aba e nao tem {% url %}:
-# por isso o link da tela de detalhe do produto ja vai pronto em cada passo
-def _com_link(passos):
+# Prepara os passos para o dashboard. O JS redesenha a lista ao trocar de aba e nao
+# tem {% url %}, entao o link do produto ja vai pronto em cada passo. `feitos` sao os
+# passos que a pessoa marcou hoje: (periodo, titulo, produto_id). Feito = verde com
+# check; nao feito = azul (reaproveita as classes 'completed' e 'action-required' do CSS)
+def _preparar_passos(passos, periodo, feitos):
     for passo in passos:
         passo['url'] = reverse('produto_detalhe', args=[passo['produto_id']]) if passo['produto_id'] else None
+        passo['feito'] = (periodo, passo['title'], passo['produto_id'] or 0) in feitos
+        passo['class'] = 'completed' if passo['feito'] else 'action-required'
+        passo['icon'] = 'fa-check' if passo['feito'] else None
     return passos
+
+
+def _passos_feitos_hoje(usuario):
+    hoje = timezone.localdate()
+    return set(PassoRotinaFeito.objects.filter(usuario=usuario, data=hoje)
+               .values_list('periodo', 'titulo', 'produto_id'))
 
 
 def dashboard_view(request):
@@ -676,16 +688,47 @@ def dashboard_view(request):
 
     # rotina real (produtos do catalogo) montada em recomendacao.py; sem perfil vem vazia
     rotina = montar_rotina(perfil)
+    feitos = _passos_feitos_hoje(request.user) if perfil else set()
 
     context = {
         'perfil': perfil,
-        'rotina_manha': _com_link(rotina['manha']),
-        'rotina_noite': _com_link(rotina['noite']),
-        'avisos': rotina['avisos'],
+        'rotina_manha': _preparar_passos(rotina['manha'], 'manha', feitos),
+        'rotina_noite': _preparar_passos(rotina['noite'], 'noite', feitos),
+        # o aviso do rotulo vai numa nota pequena abaixo do card, nao dentro dele
+        'avisos': [a for a in rotina['avisos'] if a['texto'] != AVISO_ROTULO],
+        'aviso_rotulo': AVISO_ROTULO,
         'fototipo': _fototipo_do_perfil(perfil),
         'objetivo_rotulo': rotulo_objetivo(perfil.objetivo) if perfil else '',
     }
     return render(request, 'core/dashboard.html', context)
+
+
+@login_required
+def rotina_marcar(request):
+    # marca (feito=1) ou desmarca (feito=0) um passo da rotina de HOJE. Chamado pelo JS do dashboard.
+    # So aceita passos que existem na rotina atual da pessoa, para nao gravar lixo no banco
+    if request.method != 'POST':
+        return JsonResponse({'erro': 'Use POST.'}, status=405)
+
+    perfil = _perfil_do_usuario(request.user)
+    periodo = request.POST.get('periodo')
+    titulo = request.POST.get('titulo', '')
+    produto_id = _inteiro(request.POST.get('produto_id'), 0, 0)
+    feito = request.POST.get('feito') == '1'
+
+    if perfil is None or periodo not in ('manha', 'noite'):
+        return JsonResponse({'erro': 'Passo inválido.'}, status=400)
+    passos = montar_rotina(perfil)[periodo]
+    if not any(p['title'] == titulo and (p['produto_id'] or 0) == produto_id for p in passos):
+        return JsonResponse({'erro': 'Passo inválido.'}, status=400)
+
+    marcacao = dict(usuario=request.user, data=timezone.localdate(), periodo=periodo,
+                    titulo=titulo, produto_id=produto_id)
+    if feito:
+        PassoRotinaFeito.objects.get_or_create(**marcacao)
+    else:
+        PassoRotinaFeito.objects.filter(**marcacao).delete()
+    return JsonResponse({'ok': True, 'feito': feito})
 
 
 # ==========================================================================
@@ -1096,6 +1139,11 @@ def exportar_dados(request):
             'cadastrada_em': request.user.data_cadastro.isoformat(),
         },
         'perfil_dermatologico': None,
+        # historico dos passos da rotina marcados como feitos
+        'rotina_feita': [
+            {'data': str(m.data), 'periodo': m.periodo, 'passo': m.titulo, 'produto_id': m.produto_id or None}
+            for m in PassoRotinaFeito.objects.filter(usuario=request.user).order_by('data', 'id')
+        ],
     }
 
     if perfil:
@@ -1114,6 +1162,9 @@ def exportar_dados(request):
             'sono_horas': perfil.sono_horas,
             'protetor_solar': perfil.protetor_solar,
             'exercicio_frequencia': perfil.exercicio_frequencia,
+            'pele_sensivel': perfil.sensibilidade,
+            'gestante': perfil.gestante,
+            'tipo_acne': perfil.tipo_acne or None,
             'fototipo': perfil.fototipo,
             'porcentagem_saude': perfil.porcentagem_saude,
             'imagem_do_scan': perfil.foto_rosto,

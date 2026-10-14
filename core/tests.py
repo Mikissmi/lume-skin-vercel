@@ -6,10 +6,13 @@ from io import StringIO
 from django.conf import settings
 from django.core.management import call_command
 from django.core.management.base import CommandError
-from django.test import TestCase
+from datetime import timedelta
+
+from django.test import Client, TestCase
+from django.utils import timezone
 from django.urls import reverse
 
-from .models import Usuario, PerfilDermatologico, Produto, RegraTratamento
+from .models import PassoRotinaFeito, PerfilDermatologico, Produto, RegraTratamento, Usuario
 from .recomendacao import (
     MAPA_OBJETIVO_PREOCUPACAO, OBJETIVOS, ativo_nas_alergias, extrair_sinais_faciais, faixa_etaria,
     montar_rotina, normalizar_objetivo, pontuar_produto, preocupacoes_de_tratamento,
@@ -1130,3 +1133,183 @@ class TelaProdutosTests(PerfilBaseTestCase):
         self.assertContains(resposta, 'Controlar oleosidade')
         self.assertContains(resposta, 'Rotina completa')
         self.assertContains(resposta, 'Gel de Limpeza')
+
+
+# ==========================================================================
+# MARCAR PASSOS COMO FEITOS - POST /rotina/marcar/ e o estado no dashboard
+# ==========================================================================
+
+class RotinaMarcarTests(PerfilBaseTestCase):
+    # perfil da PerfilBaseTestCase: 27 anos, mista, "controlar oleosidade" -> regra de Poros Dilatados
+    def setUp(self):
+        super().setUp()
+        self.limpeza = criar_produto('Gel de Limpeza', 'Limpeza', 'Glicerina')
+        self.hidratante = criar_produto('Hidratante Basico', 'Hidratante', 'Ceramidas')
+        self.protetor = criar_produto('Protetor FPS', 'Protetor Solar', 'Filtro Solar', modo_uso='Manhã')
+        criar_regra('25-36', 'mista', 'Poros Dilatados', 'Niacinamida + Argila + Ácido Salicílico')
+        self.serum = criar_produto('Serum Niacinamida', 'Sérum', 'Niacinamida')
+        self.salicilico = criar_produto('Tonico Salicilico', 'Tônico', 'Ácido Salicílico')
+
+    def marcar(self, periodo='manha', titulo='Limpeza', produto_id=None, feito='1', cliente=None):
+        dados = {'periodo': periodo, 'titulo': titulo, 'feito': feito}
+        dados['produto_id'] = self.limpeza.id if produto_id is None else produto_id
+        return (cliente or self.client).post(reverse('rotina_marcar'), dados)
+
+    def estado_dos_passos(self, periodo='rotina_manha'):
+        passos = self.client.get(reverse('dashboard')).context[periodo]
+        return {(p['title'], p['produto_id']): p['feito'] for p in passos}
+
+    def test_marcar_grava_a_linha_com_a_data_de_hoje(self):
+        resposta = self.marcar()
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(resposta.json(), {'ok': True, 'feito': True})
+        marca = PassoRotinaFeito.objects.get()
+        self.assertEqual((marca.usuario, marca.periodo, marca.titulo, marca.produto_id),
+                         (self.usuario, 'manha', 'Limpeza', self.limpeza.id))
+        self.assertEqual(marca.data, timezone.localdate())
+
+    def test_dashboard_mostra_feito_em_verde_e_o_resto_em_azul(self):
+        self.marcar()
+        resposta = self.client.get(reverse('dashboard'))
+        passos = {p['title']: p for p in resposta.context['rotina_manha'] if p['title'] != 'Tratamento'}
+        self.assertTrue(passos['Limpeza']['feito'])
+        self.assertEqual((passos['Limpeza']['class'], passos['Limpeza']['icon']), ('completed', 'fa-check'))
+        for titulo in ('Hidratante', 'Protetor solar'):
+            self.assertFalse(passos[titulo]['feito'])
+            self.assertEqual((passos[titulo]['class'], passos[titulo]['icon']), ('action-required', None))
+        self.assertContains(resposta, 'class="rotina-item completed"')
+        self.assertContains(resposta, 'aria-label="Desmarcar Limpeza como feito"')
+        self.assertContains(resposta, 'aria-label="Marcar Hidratante como feito"')
+
+    def test_sem_marcar_nada_tudo_fica_como_nao_feito(self):
+        resposta = self.client.get(reverse('dashboard'))
+        for passo in resposta.context['rotina_manha'] + resposta.context['rotina_noite']:
+            self.assertFalse(passo['feito'])
+            self.assertEqual(passo['class'], 'action-required')
+
+    def test_desmarcar_apaga_a_linha(self):
+        self.marcar()
+        resposta = self.marcar(feito='0')
+        self.assertEqual(resposta.json(), {'ok': True, 'feito': False})
+        self.assertEqual(PassoRotinaFeito.objects.count(), 0)
+        self.assertFalse(self.estado_dos_passos()[('Limpeza', self.limpeza.id)])
+
+    def test_marcar_duas_vezes_nao_duplica_e_desmarcar_sem_marca_nao_da_erro(self):
+        self.marcar()
+        self.marcar()
+        self.assertEqual(PassoRotinaFeito.objects.count(), 1)
+        self.marcar(titulo='Hidratante', produto_id=self.hidratante.id, feito='0')  # nada marcado
+        self.assertEqual(PassoRotinaFeito.objects.count(), 1)
+
+    def test_manha_e_noite_sao_marcados_separadamente(self):
+        self.marcar(periodo='manha')
+        self.assertTrue(self.estado_dos_passos('rotina_manha')[('Limpeza', self.limpeza.id)])
+        self.assertFalse(self.estado_dos_passos('rotina_noite')[('Limpeza e demaquilante', self.limpeza.id)]
+                         if ('Limpeza e demaquilante', self.limpeza.id) in self.estado_dos_passos('rotina_noite') else False)
+        self.marcar(periodo='noite', titulo='Limpeza e demaquilante')
+        self.assertEqual(PassoRotinaFeito.objects.count(), 2)
+
+    def test_os_dois_passos_de_tratamento_sao_independentes(self):
+        self.marcar(titulo='Tratamento', produto_id=self.serum.id)
+        estado = self.estado_dos_passos()
+        self.assertTrue(estado[('Tratamento', self.serum.id)])
+        self.assertFalse(estado[('Tratamento', self.salicilico.id)])
+
+    def test_passo_sem_produto_usa_produto_id_zero(self):
+        Produto.objects.filter(categoria='Hidratante').delete()
+        resposta = self.marcar(titulo='Hidratante', produto_id=0)
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(PassoRotinaFeito.objects.get().produto_id, 0)
+        self.assertTrue(self.estado_dos_passos()[('Hidratante', None)])
+
+    def test_passo_que_nao_existe_na_rotina_e_recusado(self):
+        casos = [
+            dict(periodo='tarde'),
+            dict(titulo='Passo inventado'),
+            dict(produto_id=99999),
+            dict(periodo='noite', titulo='Protetor solar', produto_id=self.protetor.id),  # protetor so de manha
+        ]
+        for caso in casos:
+            self.assertEqual(self.marcar(**caso).status_code, 400, caso)
+        self.assertEqual(PassoRotinaFeito.objects.count(), 0)
+
+    def test_so_aceita_post(self):
+        self.assertEqual(self.client.get(reverse('rotina_marcar')).status_code, 405)
+
+    def test_exige_login(self):
+        self.client.logout()
+        resposta = self.marcar()
+        self.assertEqual(resposta.status_code, 302)
+        self.assertIn(reverse('login'), resposta.url)
+        self.assertEqual(PassoRotinaFeito.objects.count(), 0)
+
+    def test_usuario_sem_perfil_nao_marca(self):
+        self.client.logout()
+        criar_usuario_com_perfil('sem-perfil@email.com', com_perfil=False)
+        self.client.login(username='sem-perfil@email.com', password=SENHA)
+        self.assertEqual(self.marcar().status_code, 400)
+
+    def test_exige_o_token_csrf(self):
+        cliente = Client(enforce_csrf_checks=True)
+        cliente.login(username='ana@email.com', password=SENHA)
+        self.assertEqual(self.marcar(cliente=cliente).status_code, 403)
+        self.assertEqual(PassoRotinaFeito.objects.count(), 0)
+
+    def test_marcas_de_outro_dia_nao_aparecem_hoje_mas_ficam_no_historico(self):
+        ontem = timezone.localdate() - timedelta(days=1)
+        PassoRotinaFeito.objects.create(usuario=self.usuario, data=ontem, periodo='manha',
+                                        titulo='Limpeza', produto_id=self.limpeza.id)
+        self.assertFalse(self.estado_dos_passos()[('Limpeza', self.limpeza.id)])
+        self.marcar()   # hoje
+        self.assertEqual(PassoRotinaFeito.objects.count(), 2)
+        self.marcar(feito='0')   # desmarcar hoje nao mexe no historico de ontem
+        self.assertEqual(PassoRotinaFeito.objects.get().data, ontem)
+
+    def test_marcas_de_outro_usuario_nao_vazam(self):
+        outro, _ = criar_usuario_com_perfil('outra@email.com')
+        PassoRotinaFeito.objects.create(usuario=outro, data=timezone.localdate(), periodo='manha',
+                                        titulo='Limpeza', produto_id=self.limpeza.id)
+        self.assertFalse(self.estado_dos_passos()[('Limpeza', self.limpeza.id)])
+        self.marcar(feito='0')   # nao apaga a marca da outra pessoa
+        self.assertEqual(PassoRotinaFeito.objects.filter(usuario=outro).count(), 1)
+
+    def test_horario_nao_aparece_mais_na_tela_mas_a_chave_time_continua_nos_dados(self):
+        resposta = self.client.get(reverse('dashboard'))
+        self.assertNotContains(resposta, 'rotina-time')
+        conteudo = resposta.content.decode()
+        lista = conteudo[conteudo.index('id="rotina-lista"'):conteudo.index('id="rotina-erro"')]
+        self.assertNotRegex(lista, r'\d\d:\d\d')   # a lista visivel nao mostra horario
+        self.assertTrue(all('time' in p for p in resposta.context['rotina_manha']))
+
+    def test_aviso_do_rotulo_fica_na_nota_abaixo_do_card(self):
+        resposta = self.client.get(reverse('dashboard'))
+        self.assertNotIn('Confira o rótulo', ' '.join(a['texto'] for a in resposta.context['avisos']))
+        conteudo = resposta.content.decode()
+        nota = conteudo.index('class="rotina-nota"')
+        self.assertIn('Confira o rótulo', conteudo[nota:nota + 400])
+        self.assertIn('não substitui a avaliação de um dermatologista', conteudo[nota:nota + 400])
+        # a nota vem depois do fim do card da rotina
+        self.assertGreater(nota, conteudo.index('id="rotina-manha-data"'))
+
+    def test_sem_avisos_no_card_nao_mostra_a_caixa_vazia(self):
+        self.assertEqual(self.client.get(reverse('dashboard')).context['avisos'], [])
+        self.assertNotContains(self.client.get(reverse('dashboard')), 'class="rotina-avisos"')
+
+    def test_excluir_a_conta_apaga_as_marcas(self):
+        self.marcar()
+        self.client.post(reverse('excluir_conta'), {'senha': SENHA, 'confirmacao': 'EXCLUIR'})
+        self.assertEqual(PassoRotinaFeito.objects.count(), 0)
+
+    def test_exportar_dados_inclui_historico_e_campos_novos_do_perfil(self):
+        ontem = timezone.localdate() - timedelta(days=1)
+        PassoRotinaFeito.objects.create(usuario=self.usuario, data=ontem, periodo='noite',
+                                        titulo='Hidratante', produto_id=0)
+        self.perfil.sensibilidade = True
+        self.perfil.tipo_acne = 'Nodular'
+        self.perfil.save()
+        dados = json.loads(self.client.get(reverse('exportar_dados')).content)
+        self.assertEqual(dados['rotina_feita'], [
+            {'data': str(ontem), 'periodo': 'noite', 'passo': 'Hidratante', 'produto_id': None}])
+        self.assertIs(dados['perfil_dermatologico']['pele_sensivel'], True)
+        self.assertIs(dados['perfil_dermatologico']['gestante'], False)
+        self.assertEqual(dados['perfil_dermatologico']['tipo_acne'], 'Nodular')

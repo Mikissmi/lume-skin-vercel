@@ -178,6 +178,26 @@ class Produto(models.Model):
         return [p.strip() for p in self.preocupacao.split(';') if p.strip()]
 
 
+class PassoRotinaFeito(models.Model):
+    # Um passo da rotina (ex.: "Limpeza" da manha) que a pessoa marcou como feito em
+    # um dia. Existir a linha = feito; desmarcar apaga a linha. As linhas dos dias
+    # anteriores ficam guardadas (historico).
+    usuario = models.ForeignKey(Usuario, on_delete=models.CASCADE, db_column='id_usuario')
+    data = models.DateField()
+    periodo = models.CharField(max_length=10)        # 'manha' ou 'noite'
+    titulo = models.CharField(max_length=50)         # 'Limpeza', 'Tratamento', 'Hidratante'...
+    produto_id = models.PositiveIntegerField(default=0)  # 0 = passo sem produto; sem FK: o produto pode sair do catalogo
+    marcado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'passo_rotina_feito'
+        # o dia + periodo + passo identificam a marcacao; o "Tratamento" aparece 2x, com produtos diferentes
+        unique_together = [('usuario', 'data', 'periodo', 'titulo', 'produto_id')]
+
+    def __str__(self):
+        return f'{self.data} {self.periodo}: {self.titulo}'
+
+
 class RegraTratamento(models.Model):
     # Uma linha do dataset de tratamento: para este perfil (faixa de idade, tipo de pele,
     # sensibilidade...) e esta preocupacao, quais ATIVOS usar. Nao e uma rotina: os passos

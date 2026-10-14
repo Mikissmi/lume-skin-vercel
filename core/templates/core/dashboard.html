@@ -58,55 +58,65 @@
             </div>
         </div>
 
-        <ul class="rotina-lista" id="rotina-lista">
+        <!-- cada passo e clicavel: marca/desmarca como feito de hoje (salvo no banco por rotina_marcar) -->
+        <ul class="rotina-lista" id="rotina-lista" data-url-marcar="{% url 'rotina_marcar' %}" data-csrf="{{ csrf_token }}">
             {% for item in rotina_manha %}
             <li class="rotina-item {{ item.class }}">
-                <div class="status">
-                    {% if item.icon %}
-                    <i class="fa-solid {{ item.icon }}" aria-hidden="true"></i>
-                    {% endif %}
-                </div>
+                <button type="button" class="status" aria-pressed="{% if item.feito %}true{% else %}false{% endif %}" aria-label="{% if item.feito %}Desmarcar{% else %}Marcar{% endif %} {{ item.title }} como feito">
+                    {% if item.icon %}<span aria-hidden="true">&#10003;</span>{% endif %}
+                </button>
                 <div class="rotina-details">
                     <strong>{{ item.title }}</strong>
                     <span>{% if item.url %}<a href="{{ item.url }}">{{ item.description }}</a>{% else %}{{ item.description }}{% endif %}</span>
                 </div>
-                {% if item.action %}
-                <div class="rotina-action">{{ item.action }}</div>
-                {% else %}
-                <div class="rotina-time">{{ item.time }}</div>
-                {% endif %}
+                {% if item.action %}<div class="rotina-action">{{ item.action }}</div>{% endif %}
             </li>
             {% endfor %}
         </ul>
+        <p class="rotina-erro" id="rotina-erro" role="alert" hidden>Não foi possível salvar agora. Tente de novo.</p>
 
+        {% if avisos %}
         <div class="rotina-avisos">
             {% for aviso in avisos %}
             <p class="rotina-aviso{% if aviso.destaque %} destaque{% endif %}" role="note">{{ aviso.texto }}</p>
             {% endfor %}
-            <p class="rotina-aviso fixo" role="note">Esta rotina não substitui a avaliação de um dermatologista.</p>
         </div>
+        {% endif %}
 
         {{ rotina_manha|json_script:"rotina-manha-data" }}
         {{ rotina_noite|json_script:"rotina-noite-data" }}
     </div>
+
+    <!-- nota fixa, fora do card: pequena e discreta -->
+    <p class="rotina-nota" role="note">{{ aviso_rotulo }}<br>Esta rotina não substitui a avaliação de um dermatologista.</p>
+
     <script>
         (function() {
-            const rotinaManha = JSON.parse(document.getElementById('rotina-manha-data').textContent);
-            const rotinaNoite = JSON.parse(document.getElementById('rotina-noite-data').textContent);
+            const rotinas = {
+                manha: JSON.parse(document.getElementById('rotina-manha-data').textContent),
+                noite: JSON.parse(document.getElementById('rotina-noite-data').textContent),
+            };
             const listaRotina = document.getElementById('rotina-lista');
+            const erroRotina = document.getElementById('rotina-erro');
             const botoes = document.querySelectorAll('.escolha .btn');
+            let periodoAtual = 'manha';
 
             function criarItemRotina(item) {
                 const li = document.createElement('li');
                 li.className = `rotina-item ${item.class}`;
 
-                const status = document.createElement('div');
+                /* bolinha = botao (teclado e leitor de tela); o clique em qualquer parte do passo, menos no link, tambem marca */
+                const status = document.createElement('button');
+                status.type = 'button';
                 status.className = 'status';
+                status.setAttribute('aria-pressed', item.feito ? 'true' : 'false');
+                status.setAttribute('aria-label', `${item.feito ? 'Desmarcar' : 'Marcar'} ${item.title} como feito`);
                 if (item.icon) {
-                    const icone = document.createElement('i');
-                    icone.className = `fa-solid ${item.icon}`;
-                    icone.setAttribute('aria-hidden', 'true');
-                    status.appendChild(icone);
+                    /* check em texto: o Font Awesome nao e carregado nesta pagina */
+                    const check = document.createElement('span');
+                    check.textContent = '\u2713';
+                    check.setAttribute('aria-hidden', 'true');
+                    status.appendChild(check);
                 }
 
                 const detalhes = document.createElement('div');
@@ -125,22 +135,60 @@
                 }
                 detalhes.append(titulo, descricao);
 
-                const extra = document.createElement('div');
+                li.append(status, detalhes);
                 if (item.action) {
+                    const extra = document.createElement('div');
                     extra.className = 'rotina-action';
                     extra.textContent = item.action;
-                } else {
-                    extra.className = 'rotina-time';
-                    extra.textContent = item.time || '';
+                    li.append(extra);
                 }
 
-                li.append(status, detalhes, extra);
+                li.addEventListener('click', (evento) => {
+                    if (evento.target.closest('a')) { return; }
+                    alternarFeito(item, li);
+                });
                 return li;
             }
 
-            function renderizarRotina(itens) {
+            function renderizarRotina(periodo) {
+                periodoAtual = periodo;
                 listaRotina.innerHTML = ''; // string vazia, sem risco - so limpa a lista
-                itens.forEach(item => listaRotina.appendChild(criarItemRotina(item)));
+                rotinas[periodo].forEach(item => listaRotina.appendChild(criarItemRotina(item)));
+            }
+
+            /* feito = verde com check; nao feito = azul (classes 'completed' e 'action-required') */
+            function aplicarEstado(item, feito) {
+                item.feito = feito;
+                item.class = feito ? 'completed' : 'action-required';
+                item.icon = feito ? 'fa-check' : null;
+            }
+
+            async function alternarFeito(item, li) {
+                if (item.salvando) { return; }
+                const periodo = periodoAtual;
+                item.salvando = true;
+                erroRotina.hidden = true;
+                aplicarEstado(item, !item.feito);               /* mostra na hora */
+                li.replaceWith(criarItemRotina(item));
+                try {
+                    const resposta = await fetch(listaRotina.dataset.urlMarcar, {
+                        method: 'POST',
+                        headers: { 'X-CSRFToken': listaRotina.dataset.csrf },
+                        body: new URLSearchParams({
+                            periodo: periodo,
+                            titulo: item.title,
+                            produto_id: item.produto_id || 0,
+                            feito: item.feito ? '1' : '0',
+                        }),
+                    });
+                    if (!resposta.ok) { throw new Error('HTTP ' + resposta.status); }
+                } catch (erro) {
+                    aplicarEstado(item, !item.feito);           /* nao salvou: volta ao estado anterior */
+                    erroRotina.hidden = false;
+                    if (periodoAtual === periodo) { renderizarRotina(periodo); }
+                } finally {
+                    item.salvando = false;
+                }
             }
 
             botoes.forEach(botao => {
@@ -151,9 +199,11 @@
                     });
                     botao.classList.add('ativo');
                     botao.setAttribute('aria-selected', 'true');
-                    renderizarRotina(botao.dataset.mode === 'noite' ? rotinaNoite : rotinaManha);
+                    renderizarRotina(botao.dataset.mode === 'noite' ? 'noite' : 'manha');
                 });
             });
+
+            renderizarRotina('manha');
         })();
     </script>
 </div>
