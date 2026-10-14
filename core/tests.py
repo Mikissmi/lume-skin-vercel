@@ -1168,24 +1168,69 @@ class RotinaMarcarTests(PerfilBaseTestCase):
                          (self.usuario, 'manha', 'Limpeza', self.limpeza.id))
         self.assertEqual(marca.data, timezone.localdate())
 
-    def test_dashboard_mostra_feito_em_verde_e_o_resto_em_azul(self):
-        self.marcar()
+    def test_dashboard_mostra_feito_em_verde_proximo_em_azul_e_o_resto_neutro(self):
+        self.marcar()   # Limpeza feita -> o proximo passo e o primeiro Tratamento
         resposta = self.client.get(reverse('dashboard'))
-        passos = {p['title']: p for p in resposta.context['rotina_manha'] if p['title'] != 'Tratamento'}
-        self.assertTrue(passos['Limpeza']['feito'])
-        self.assertEqual((passos['Limpeza']['class'], passos['Limpeza']['icon']), ('completed', 'fa-check'))
-        for titulo in ('Hidratante', 'Protetor solar'):
-            self.assertFalse(passos[titulo]['feito'])
-            self.assertEqual((passos[titulo]['class'], passos[titulo]['icon']), ('action-required', None))
+        passos = resposta.context['rotina_manha']
+        self.assertEqual([p['title'] for p in passos], ['Limpeza', 'Tratamento', 'Tratamento', 'Hidratante', 'Protetor solar'])
+        self.assertEqual([p['class'] for p in passos],
+                         ['completed', 'action-required', 'pending', 'pending', 'pending'])
+        self.assertEqual((passos[0]['feito'], passos[0]['icon']), (True, 'fa-check'))
+        self.assertEqual((passos[1]['feito'], passos[1]['icon'], passos[1]['action']), (False, None, 'Marcar como feito'))
+        self.assertEqual([p['action'] for p in passos[2:]], [None, None, None])
         self.assertContains(resposta, 'class="rotina-item completed"')
+        self.assertContains(resposta, 'class="rotina-item action-required"')
+        self.assertContains(resposta, 'class="rotina-item pending"')
         self.assertContains(resposta, 'aria-label="Desmarcar Limpeza como feito"')
         self.assertContains(resposta, 'aria-label="Marcar Hidratante como feito"')
 
-    def test_sem_marcar_nada_tudo_fica_como_nao_feito(self):
+    def test_sem_marcar_nada_so_o_primeiro_e_o_proximo_passo(self):
         resposta = self.client.get(reverse('dashboard'))
-        for passo in resposta.context['rotina_manha'] + resposta.context['rotina_noite']:
-            self.assertFalse(passo['feito'])
-            self.assertEqual(passo['class'], 'action-required')
+        for chave in ('rotina_manha', 'rotina_noite'):
+            passos = resposta.context[chave]
+            self.assertTrue(all(not p['feito'] for p in passos))
+            self.assertEqual(passos[0]['class'], 'action-required')
+            self.assertEqual({p['class'] for p in passos[1:]}, {'pending'})
+
+    def test_o_proximo_passo_avanca_conforme_marca(self):
+        # marcar um passo do meio nao muda o proximo: e sempre o primeiro NAO feito
+        self.marcar(titulo='Hidratante', produto_id=self.hidratante.id)
+        classes = [p['class'] for p in self.client.get(reverse('dashboard')).context['rotina_manha']]
+        self.assertEqual(classes, ['action-required', 'pending', 'pending', 'completed', 'pending'])
+        self.marcar()   # Limpeza
+        classes = [p['class'] for p in self.client.get(reverse('dashboard')).context['rotina_manha']]
+        self.assertEqual(classes, ['completed', 'action-required', 'pending', 'completed', 'pending'])
+
+    def test_com_tudo_feito_nao_ha_proximo_passo(self):
+        for passo in self.client.get(reverse('dashboard')).context['rotina_manha']:
+            self.marcar(titulo=passo['title'], produto_id=passo['produto_id'] or 0)
+        resposta = self.client.get(reverse('dashboard'))
+        self.assertEqual({p['class'] for p in resposta.context['rotina_manha']}, {'completed'})
+        conteudo = resposta.content.decode()
+        lista = conteudo[conteudo.index('id="rotina-lista"'):conteudo.index('id="rotina-erro"')]
+        self.assertNotIn('rotina-botao', lista)      # sem botao: nao sobrou passo para fazer
+        self.assertEqual(resposta.context['resumo_manha'], {'feitos': 5, 'total': 5, 'porcentagem': 100})
+
+    def test_contador_e_barra_de_progresso(self):
+        resposta = self.client.get(reverse('dashboard'))
+        self.assertContains(resposta, 'Sua rotina de hoje')
+        self.assertNotContains(resposta, 'Status de Hoje')
+        self.assertContains(resposta, '0 de 5 passos concluídos')
+        self.assertContains(resposta, '<span style="width: 0%"></span>', html=True)
+        self.marcar()
+        self.marcar(titulo='Hidratante', produto_id=self.hidratante.id)
+        resposta = self.client.get(reverse('dashboard'))
+        self.assertEqual(resposta.context['resumo_manha'], {'feitos': 2, 'total': 5, 'porcentagem': 40})
+        self.assertContains(resposta, '2 de 5 passos concluídos')
+        self.assertContains(resposta, 'aria-valuenow="2"')
+        self.assertContains(resposta, 'aria-valuemax="5"')
+        self.assertContains(resposta, '<span style="width: 40%"></span>', html=True)
+
+    def test_botao_marcar_como_feito_so_no_proximo_passo_e_com_texto_de_proximo(self):
+        resposta = self.client.get(reverse('dashboard'))
+        self.assertContains(resposta, 'class="rotina-botao"', count=1)
+        self.assertContains(resposta, 'Marcar como feito</span>')
+        self.assertContains(resposta, 'Próximo passo &middot; <a href=', count=1)
 
     def test_desmarcar_apaga_a_linha(self):
         self.marcar()

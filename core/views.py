@@ -662,15 +662,33 @@ def _fototipo_do_perfil(perfil):
 
 # Prepara os passos para o dashboard. O JS redesenha a lista ao trocar de aba e nao
 # tem {% url %}, entao o link do produto ja vai pronto em cada passo. `feitos` sao os
-# passos que a pessoa marcou hoje: (periodo, titulo, produto_id). Feito = verde com
-# check; nao feito = azul (reaproveita as classes 'completed' e 'action-required' do CSS)
+# passos que a pessoa marcou hoje: (periodo, titulo, produto_id). Tres estados:
+# feito = 'completed' (verde com check); o PRIMEIRO nao feito e o "proximo passo" =
+# 'action-required' (azul, com o botao "Marcar como feito"); os demais = 'pending'.
+# (O JS do dashboard repete essa mesma regra a cada clique.)
 def _preparar_passos(passos, periodo, feitos):
+    proximo_definido = False
     for passo in passos:
         passo['url'] = reverse('produto_detalhe', args=[passo['produto_id']]) if passo['produto_id'] else None
         passo['feito'] = (periodo, passo['title'], passo['produto_id'] or 0) in feitos
-        passo['class'] = 'completed' if passo['feito'] else 'action-required'
         passo['icon'] = 'fa-check' if passo['feito'] else None
+        passo['action'] = None
+        if passo['feito']:
+            passo['class'] = 'completed'
+        elif not proximo_definido:
+            passo['class'] = 'action-required'
+            passo['action'] = 'Marcar como feito'
+            proximo_definido = True
+        else:
+            passo['class'] = 'pending'
     return passos
+
+
+# "2 de 4 passos concluidos" + largura da barra de progresso
+def _resumo_passos(passos):
+    feitos = sum(1 for passo in passos if passo['feito'])
+    total = len(passos)
+    return {'feitos': feitos, 'total': total, 'porcentagem': round(100 * feitos / total) if total else 0}
 
 
 def _passos_feitos_hoje(usuario):
@@ -690,10 +708,14 @@ def dashboard_view(request):
     rotina = montar_rotina(perfil)
     feitos = _passos_feitos_hoje(request.user) if perfil else set()
 
+    rotina_manha = _preparar_passos(rotina['manha'], 'manha', feitos)
+    rotina_noite = _preparar_passos(rotina['noite'], 'noite', feitos)
+
     context = {
         'perfil': perfil,
-        'rotina_manha': _preparar_passos(rotina['manha'], 'manha', feitos),
-        'rotina_noite': _preparar_passos(rotina['noite'], 'noite', feitos),
+        'rotina_manha': rotina_manha,
+        'rotina_noite': rotina_noite,
+        'resumo_manha': _resumo_passos(rotina_manha),
         # o aviso do rotulo vai numa nota pequena abaixo do card, nao dentro dele
         'avisos': [a for a in rotina['avisos'] if a['texto'] != AVISO_ROTULO],
         'aviso_rotulo': AVISO_ROTULO,

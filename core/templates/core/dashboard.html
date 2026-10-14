@@ -50,11 +50,19 @@
 
     <div class="dashboard-rotina">
     <div class="card card-rotina-diaria">
-        <div class="status-cabecalho">
-            <h3>Status de Hoje</h3>
-            <div class="escolha" role="tablist" aria-label="Período do dia">
-                <button class="btn ativo" data-mode="manha" role="tab" aria-selected="true">Manhã</button>
-                <button class="btn" data-mode="noite" role="tab" aria-selected="false">Noite</button>
+        <div class="status-topo">
+            <div class="status-cabecalho">
+                <div>
+                    <h3>Sua rotina de hoje</h3>
+                    <p class="rotina-contador" id="rotina-contador" aria-live="polite">{{ resumo_manha.feitos }} de {{ resumo_manha.total }} passos concluídos</p>
+                </div>
+                <div class="escolha" role="tablist" aria-label="Período do dia">
+                    <button class="btn ativo" data-mode="manha" role="tab" aria-selected="true">Manhã</button>
+                    <button class="btn" data-mode="noite" role="tab" aria-selected="false">Noite</button>
+                </div>
+            </div>
+            <div class="rotina-progresso" id="rotina-progresso" role="progressbar" aria-label="Progresso da rotina" aria-valuemin="0" aria-valuemax="{{ resumo_manha.total }}" aria-valuenow="{{ resumo_manha.feitos }}">
+                <span style="width: {{ resumo_manha.porcentagem }}%"></span>
             </div>
         </div>
 
@@ -67,9 +75,9 @@
                 </button>
                 <div class="rotina-details">
                     <strong>{{ item.title }}</strong>
-                    <span>{% if item.url %}<a href="{{ item.url }}">{{ item.description }}</a>{% else %}{{ item.description }}{% endif %}</span>
+                    <span>{% if item.action %}Próximo passo &middot; {% endif %}{% if item.url %}<a href="{{ item.url }}">{{ item.description }}</a>{% else %}{{ item.description }}{% endif %}</span>
                 </div>
-                {% if item.action %}<div class="rotina-action">{{ item.action }}</div>{% endif %}
+                {% if item.action %}<span class="rotina-botao" aria-hidden="true">{{ item.action }}</span>{% endif %}
             </li>
             {% endfor %}
         </ul>
@@ -98,10 +106,32 @@
             };
             const listaRotina = document.getElementById('rotina-lista');
             const erroRotina = document.getElementById('rotina-erro');
+            const contador = document.getElementById('rotina-contador');
+            const progresso = document.getElementById('rotina-progresso');
             const botoes = document.querySelectorAll('.escolha .btn');
             let periodoAtual = 'manha';
 
-            function criarItemRotina(item) {
+            /* Tres estados (mesma regra do servidor, em views._preparar_passos):
+               feito = verde com check; o primeiro nao feito = "proximo passo" (azul, com botao); os demais = neutros */
+            function recalcular(periodo) {
+                let proximoDefinido = false;
+                rotinas[periodo].forEach(item => {
+                    item.icon = null;
+                    item.action = null;
+                    if (item.feito) {
+                        item.class = 'completed';
+                        item.icon = 'fa-check';
+                    } else if (!proximoDefinido) {
+                        item.class = 'action-required';
+                        item.action = 'Marcar como feito';
+                        proximoDefinido = true;
+                    } else {
+                        item.class = 'pending';
+                    }
+                });
+            }
+
+            function criarItemRotina(item, indice) {
                 const li = document.createElement('li');
                 li.className = `rotina-item ${item.class}`;
 
@@ -124,6 +154,9 @@
                 const titulo = document.createElement('strong');
                 titulo.textContent = item.title;
                 const descricao = document.createElement('span');
+                if (item.action) {
+                    descricao.append('Pr\u00f3ximo passo \u00b7 ');
+                }
                 if (item.url) {
                     /* produto do catalogo: o texto vira link para a tela de detalhe */
                     const link = document.createElement('a');
@@ -131,45 +164,57 @@
                     link.textContent = item.description;
                     descricao.appendChild(link);
                 } else {
-                    descricao.textContent = item.description;
+                    descricao.append(item.description);
                 }
                 detalhes.append(titulo, descricao);
 
                 li.append(status, detalhes);
                 if (item.action) {
-                    const extra = document.createElement('div');
-                    extra.className = 'rotina-action';
-                    extra.textContent = item.action;
-                    li.append(extra);
+                    const botao = document.createElement('span');
+                    botao.className = 'rotina-botao';
+                    botao.setAttribute('aria-hidden', 'true');
+                    botao.textContent = item.action;
+                    li.append(botao);
                 }
 
                 li.addEventListener('click', (evento) => {
                     if (evento.target.closest('a')) { return; }
-                    alternarFeito(item, li);
+                    /* detail === 0: o "clique" veio do teclado (Enter/Espaco) - so ai devolvemos o foco */
+                    alternarFeito(item, indice, evento.detail === 0);
                 });
                 return li;
             }
 
-            function renderizarRotina(periodo) {
+            /* "2 de 4 passos concluidos" e a barra de progresso do periodo mostrado */
+            function atualizarResumo(periodo) {
+                const itens = rotinas[periodo];
+                const feitos = itens.filter(item => item.feito).length;
+                const porcentagem = itens.length ? Math.round(100 * feitos / itens.length) : 0;
+                contador.textContent = `${feitos} de ${itens.length} passos conclu\u00eddos`;
+                progresso.setAttribute('aria-valuemax', itens.length);
+                progresso.setAttribute('aria-valuenow', feitos);
+                progresso.firstElementChild.style.width = porcentagem + '%';
+            }
+
+            function renderizarRotina(periodo, indiceFoco) {
                 periodoAtual = periodo;
+                recalcular(periodo);
                 listaRotina.innerHTML = ''; // string vazia, sem risco - so limpa a lista
-                rotinas[periodo].forEach(item => listaRotina.appendChild(criarItemRotina(item)));
+                rotinas[periodo].forEach((item, indice) => listaRotina.appendChild(criarItemRotina(item, indice)));
+                atualizarResumo(periodo);
+                if (indiceFoco !== undefined) {
+                    /* quem usa teclado nao perde o lugar quando a lista e redesenhada */
+                    listaRotina.children[indiceFoco].querySelector('.status').focus();
+                }
             }
 
-            /* feito = verde com check; nao feito = azul (classes 'completed' e 'action-required') */
-            function aplicarEstado(item, feito) {
-                item.feito = feito;
-                item.class = feito ? 'completed' : 'action-required';
-                item.icon = feito ? 'fa-check' : null;
-            }
-
-            async function alternarFeito(item, li) {
+            async function alternarFeito(item, indice, comFoco) {
                 if (item.salvando) { return; }
                 const periodo = periodoAtual;
                 item.salvando = true;
                 erroRotina.hidden = true;
-                aplicarEstado(item, !item.feito);               /* mostra na hora */
-                li.replaceWith(criarItemRotina(item));
+                item.feito = !item.feito;                       /* mostra na hora */
+                renderizarRotina(periodo, comFoco ? indice : undefined);
                 try {
                     const resposta = await fetch(listaRotina.dataset.urlMarcar, {
                         method: 'POST',
@@ -183,9 +228,9 @@
                     });
                     if (!resposta.ok) { throw new Error('HTTP ' + resposta.status); }
                 } catch (erro) {
-                    aplicarEstado(item, !item.feito);           /* nao salvou: volta ao estado anterior */
+                    item.feito = !item.feito;                   /* nao salvou: volta ao estado anterior */
                     erroRotina.hidden = false;
-                    if (periodoAtual === periodo) { renderizarRotina(periodo); }
+                    if (periodoAtual === periodo) { renderizarRotina(periodo); } else { recalcular(periodo); }
                 } finally {
                     item.salvando = false;
                 }

@@ -1081,20 +1081,49 @@ body.body:has(.sidebar) {
 .card-rotina-diaria {
     display: flex;
     flex-direction: column;
-    gap: 24px;
+    gap: 18px;
     background: #ffffff;
+}
+
+/* titulo + contador + seletor Manha/Noite, e a barra de progresso logo abaixo */
+.status-topo {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
 }
 
 .status-cabecalho {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 12px;
 }
 
 .status-cabecalho h3 {
     font-size: 18px;
     font-weight: 700;
     color: #0b132a;
+}
+
+.rotina-contador {
+    margin: 2px 0 0;
+    font-size: 12px;
+    color: #5f6e85;
+}
+
+/* Barra de progresso da rotina (roxo do app sobre um trilho cinza claro) */
+.rotina-progresso {
+    height: 6px;
+    border-radius: 999px;
+    background-color: #edf0f5;
+    overflow: hidden;
+}
+.rotina-progresso span {
+    display: block;
+    height: 100%;
+    border-radius: 999px;
+    background-color: #7c4dbd;
+    transition: width 0.3s ease;
 }
 
 /* Seletor Manhã / Noite - usa .btn tambem, entao aqui reseta o que
@@ -1144,29 +1173,30 @@ body.body:has(.sidebar) {
 .rotina-item {
     display: flex;
     align-items: center;
-    padding: 16px 24px;
-    border-radius: 16px;
-    border: 1px solid #e2e8f0;
-    background-color: #f8fafc;
+    gap: 14px;
+    padding: 13px 20px;
+    border-radius: 14px;
+    border: 1px solid #e6eaf1;
+    background-color: #ffffff;
     cursor: pointer; /* o passo inteiro e clicavel (marca/desmarca como feito) */
     transition: background-color 0.2s ease, border-color 0.2s ease;
 }
 
 .rotina-details {
     flex: 1;
-    margin-left: 16px;
+    min-width: 0;
 }
 
 .rotina-details strong {
     display: block;
     font-size: 14px;
-    color: #2d3748;
+    color: #0b132a;
     font-weight: 600;
 }
 
 .rotina-details span {
     font-size: 12px;
-    color: #718096;
+    color: #5f6e85;
 }
 
 /* Bolinha de status de cada item da rotina (e um <button>: funciona com teclado e leitor de tela) */
@@ -1176,7 +1206,7 @@ body.body:has(.sidebar) {
     min-width: 24px;
     padding: 0;
     border-radius: 50%;
-    border: 2px solid #cbd5e0;
+    border: 2px solid #c5ccd9;
     background-color: #ffffff;
     display: flex;
     align-items: center;
@@ -1192,37 +1222,62 @@ body.body:has(.sidebar) {
     outline-offset: 2px;
 }
 
-/* Cores dos passos: cada estado tem um tom proprio, bem diferente do branco do card
-   1. A fazer (azul) */
+/* Tres estados do passo:
+   1. Pendente (os passos depois do proximo): branco, bolinha cinza */
+.rotina-item.pending:hover {
+    border-color: #c5ccd9;
+}
+
+/* 2. Proximo passo (azul claro, bolinha azul e botao "Marcar como feito") */
 .rotina-item.action-required {
-    background-color: #eaf4fc;
-    border-color: #b9d8ee;
+    background-color: #e7f4fb;
+    border-color: #cfe8f5;
 }
 .rotina-item.action-required .status {
     border-color: #0d7cb3;
 }
-.rotina-item.action-required:hover {
-    border-color: #0d7cb3;
+.rotina-botao {
+    flex: none;
+    padding: 8px 16px;
+    border-radius: 8px;
+    background-color: #0d7cb3;
+    color: #ffffff;
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
 }
 
-/* 2. Feito (verde, com check) */
+/* 3. Feito (cinza bem claro, bolinha verde com check e titulo riscado) */
 .rotina-item.completed {
-    background-color: #e6f7ee;
-    border-color: #9fdcbd;
+    background-color: #fafbfd;
+    border-color: #f0f2f7;
 }
 .rotina-item.completed .status {
-    background-color: #10b981;
-    border-color: #10b981;
+    background-color: #0f8f66;
+    border-color: #0f8f66;
     color: #ffffff;
 }
-.rotina-item.completed:hover {
-    border-color: #10b981;
+.rotina-item.completed .rotina-details strong {
+    text-decoration: line-through;
+    color: #5a6478;
 }
 
-.rotina-action {
-    font-size: 13px;
-    font-weight: 700;
-    color: #0d7cb3;
+/* Celular: passo e botao um pouco menores para caberem lado a lado */
+@media (max-width: 480px) {
+    .status-cabecalho {
+        flex-wrap: wrap;
+    }
+    .rotina-item {
+        flex-wrap: wrap;
+        padding: 12px 14px;
+        gap: 10px;
+    }
+    /* o botao desce para uma linha propria, para o nome do produto nao ficar espremido */
+    .rotina-botao {
+        flex: 1 1 100%;
+        padding: 8px 10px;
+        text-align: center;
+    }
 }
 
 /* Produto da rotina: o texto e um link para a tela de detalhe */
