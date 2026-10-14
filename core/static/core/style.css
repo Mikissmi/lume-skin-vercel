@@ -454,7 +454,8 @@ body.body {
 
 /* Campos condicionais (aparecem via JS) se ajustando abaixo do campo principal */
 .form-bloco input[name="descricaoalergia"],
-.form-bloco input[name="objetivo_outro"] {
+.form-bloco input[name="objetivo_outro"],
+.form-bloco #bloco-tipo-acne {
     margin-top: 16px;
 }
 
@@ -960,24 +961,52 @@ body.body:has(.sidebar) {
     margin-bottom: 16px;
 }
 
-.card.perfil h3.fototipo {
-    font-size: 48px;
-    font-weight: 800;
-    color: #735bac;
-    line-height: 1;
-    margin-bottom: 12px;
+/* Fototipo: algarismo romano grande + "escala Fitzpatrick" ao lado */
+.fototipo-linha {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin-bottom: 16px;
 }
 
-.card.perfil h3.fototipo small {
-    font-size: 13px;
-    color: #a0aec0;
-    font-weight: 600;
-    margin-left: 4px;
+.fototipo-numero {
+    font-size: 56px;
+    font-weight: 800;
+    color: #7c4dbd;
+    line-height: 1;
+    letter-spacing: 2px;
+}
+
+.fototipo-linha small {
+    font-size: 15px;
+    color: #5a6478;
+    font-weight: 700;
+}
+
+/* Barra de 6 tons (I a VI); .atual = fototipo da pessoa, com contorno roxo e respiro branco */
+.fototipo-escala {
+    display: flex;
+    gap: 8px;
+    margin: 0 0 20px;
+    padding: 4px;
+    list-style: none;
+}
+
+.fototipo-escala li {
+    flex: 1;
+    height: 12px;
+    border-radius: 999px;
+}
+
+.fototipo-escala li.atual {
+    outline: 2px solid #7c4dbd;
+    outline-offset: 2px;
 }
 
 .card.perfil p {
-    font-size: 13px;
-    color: #718096;
+    font-size: 14px;
+    line-height: 1.6;
+    color: #5a6478;
     margin-bottom: 0;
 }
 
@@ -1180,6 +1209,45 @@ body.body:has(.sidebar) {
 /* 3. Item Pendente (Borda Padrão) */
 .rotina-item.pending .status {
     border-color: #cbd5e0;
+}
+
+/* Produto da rotina: o texto e um link para a tela de detalhe */
+.rotina-details a {
+    color: #0d7cb3;
+    text-decoration: none;
+}
+.rotina-details a:hover,
+.rotina-details a:focus-visible {
+    text-decoration: underline;
+}
+
+/* Avisos da rotina (abaixo da lista). .destaque = ex.: acne nodular/cistica */
+.rotina-avisos {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 20px;
+}
+.rotina-aviso {
+    margin: 0;
+    padding: 10px 14px;
+    border-radius: 12px;
+    background-color: #f7fafc;
+    border: 1px solid #edf2f7;
+    font-size: 12px;
+    line-height: 1.5;
+    color: #4a5568;
+}
+.rotina-aviso.destaque {
+    background-color: #fff5f5;
+    border-color: #fed7d7;
+    color: #c53030;
+    font-weight: 600;
+}
+.rotina-aviso.fixo {
+    background-color: transparent;
+    border-style: dashed;
+    font-style: italic;
 }
 
 /* ==========================================================================

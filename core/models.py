@@ -82,6 +82,16 @@ class PerfilDermatologico(models.Model):
     ]
     exercicio_frequencia = models.CharField(max_length=10, choices=EXERCICIO_CHOICES, default='1-2x')
 
+    # Usadas pela rotina de tratamento (recomendacao.py). Padrao False = quem
+    # respondeu o questionario antes dessas perguntas continua funcionando.
+    sensibilidade = models.BooleanField(default=False)  # pele sensivel (arde/avermelha com facilidade)
+    gestante = models.BooleanField(default=False)
+
+    # Mesmos nomes do dataset de tratamento (coluna Tipo_Interno). Vazio = "nao sei":
+    # a rotina usa Comedonal (o mais leve) e avisa para procurar um dermatologista.
+    TIPO_ACNE_CHOICES = [(t, t) for t in ['Comedonal', 'Inflamatória', 'Nodular', 'Cística']]
+    tipo_acne = models.CharField(max_length=20, choices=TIPO_ACNE_CHOICES, blank=True, default='')
+
     foto_rosto = models.CharField(max_length=500, blank=True, null=True)
     dados_ia = models.TextField(blank=True, null=True)
 
@@ -166,3 +176,33 @@ class Produto(models.Model):
 
     def preocupacoes(self):
         return [p.strip() for p in self.preocupacao.split(';') if p.strip()]
+
+
+class RegraTratamento(models.Model):
+    # Uma linha do dataset de tratamento: para este perfil (faixa de idade, tipo de pele,
+    # sensibilidade...) e esta preocupacao, quais ATIVOS usar. Nao e uma rotina: os passos
+    # e horarios quem monta e o recomendacao.py. A coluna "Concentracoes" do CSV nao e
+    # importada de proposito (os valores nao sao confiaveis).
+    faixa_etaria = models.CharField(max_length=10)   # '14-18', '19-24', '25-36', '37-45', '45+'
+    tipo_pele = models.CharField(max_length=10)      # minusculo, igual ao do perfil: 'oleosa'...
+    subtipo_pele = models.CharField(max_length=50)   # o perfil nao pergunta; usado so para desempatar
+    sensibilidade = models.BooleanField()
+    preocupacao = models.CharField(max_length=50)    # 'Acne', 'Manchas Escuras', 'Rugas'...
+    tipo_interno = models.CharField(max_length=30, blank=True)  # vazio quando o CSV diz "Geral"
+
+    # ativos separados por " + ", como no CSV: "Niacinamida + Ácido Salicílico + Retinol"
+    ingredientes = models.CharField(max_length=200)
+    efeitos = models.TextField(blank=True)
+
+    class Meta:
+        db_table = 'regra_tratamento'
+        # a combinacao identifica a linha; o importador usa isso para nao duplicar
+        unique_together = [
+            ('faixa_etaria', 'tipo_pele', 'subtipo_pele', 'sensibilidade', 'preocupacao', 'tipo_interno'),
+        ]
+
+    def __str__(self):
+        return f'{self.preocupacao} ({self.faixa_etaria}, {self.tipo_pele})'
+
+    def lista_ingredientes(self):
+        return [i.strip() for i in self.ingredientes.split('+') if i.strip()]

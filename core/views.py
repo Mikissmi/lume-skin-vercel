@@ -10,7 +10,10 @@ from django.urls import reverse
 from django.utils import timezone
 from functools import wraps
 from .models import Usuario, PerfilDermatologico, Artigo, Especialista, Produto
-from .recomendacao import recomendar_produtos, classificar_indicador
+from .youcam_utils import _extract_score
+from .recomendacao import (
+    OBJETIVOS, recomendar_produtos, classificar_indicador, montar_rotina, normalizar_objetivo, rotulo_objetivo,
+)
 import requests
 import io
 import json
@@ -75,7 +78,6 @@ def _youcam_error(response, etapa):
 # o json muda de formato conforme o recurso (e o plano), entao nao da pra
 # apontar um caminho fixo: as funcoes abaixo procuram o valor em qualquer nivel
 SUFIXOS_IMAGEM = ('.png', '.jpg', '.jpeg', '.webp')
-CHAVES_NOTA = ('ui_score', 'raw_score', 'score', 'value', 'severity')
 INDICADORES_LIDOS = ('oiliness', 'moisture', 'acne', 'pore', 'texture', 'age_spot')
 
 
@@ -103,59 +105,6 @@ def _extract_url(value):
         for item in value:
             found = _extract_url(item)
             if found:
-                return found
-    return None
-
-
-# garante que o valor e um numero (int ou float) e nao um booleano. Se nao for, devolve None
-def _numero(valor):
-    return float(valor) if isinstance(valor, (int, float)) and not isinstance(valor, bool) else None
-
-
-# nota de um indicador: numero direto, {"ui_score": 80, ...} ou por regiao ({"whole": {...}, ...})
-# ordem de tentativa: numero puro -> chave de nota (a primeira que existir) -> "whole" (rosto inteiro) -> media das regioes
-def _nota_de(item):
-    direto = _numero(item)
-    if direto is not None:
-        return direto
-    if not isinstance(item, dict):
-        return None
-    for chave in CHAVES_NOTA:
-        nota = _numero(item.get(chave))
-        if nota is not None:
-            return nota
-    if isinstance(item.get('whole'), dict):
-        nota = _nota_de(item['whole'])
-        if nota is not None:
-            return nota
-    regioes = [_nota_de(v) for v in item.values() if isinstance(v, dict)]
-    regioes = [n for n in regioes if n is not None]
-    return sum(regioes) / len(regioes) if regioes else None
-
-
-# procura a nota de um indicador em qualquer nivel do JSON da YouCam. Aceita:
-# {"oiliness": {"ui_score": 80}}, {"hd_oiliness": {...}}, {"oiliness": 80}
-# [{"type": "oiliness", "ui_score": 80, "raw_score": 78.2, "mask_urls": [...]}]
-def _extract_score(value, key):
-    nomes = (key, 'hd_' + key)
-    if isinstance(value, dict):
-        if value.get('type') in nomes:
-            nota = _nota_de(value)
-            if nota is not None:
-                return nota
-        for nome in nomes:
-            if nome in value:
-                nota = _nota_de(value[nome])
-                if nota is not None:
-                    return nota
-        for item in value.values():
-            found = _extract_score(item, key)
-            if found is not None:
-                return found
-    elif isinstance(value, list):
-        for item in value:
-            found = _extract_score(item, key)
-            if found is not None:
                 return found
     return None
 
@@ -478,6 +427,24 @@ def _foto_valida(arquivo):
     return True
 
 
+# '1'/'sim' -> True, '0'/'nao' -> False. Qualquer outra coisa -> None (nao respondeu / valor invalido)
+def _sim_nao(valor):
+    if valor in ('1', 'sim'):
+        return True
+    if valor in ('0', 'nao'):
+        return False
+    return None
+
+
+# tipo de acne so vale quando o objetivo e "reduzir acne". "Nao sei" (vazio ou qualquer valor
+# desconhecido) vira '' e a rotina usa Comedonal com aviso. `atual` e o valor a manter se o formulario nao enviou o campo
+def _tipo_acne_valido(enviado, atual, objetivo):
+    valor = atual if enviado is None else enviado
+    if normalizar_objetivo(objetivo) == 'reduzir acne' and valor in dict(PerfilDermatologico.TIPO_ACNE_CHOICES):
+        return valor
+    return ''
+
+
 # converte para int sem estourar erro 500 quando o valor vem vazio, texto ou fora da faixa
 def _inteiro(valor, padrao=0, minimo=None, maximo=None):
     try:
@@ -560,6 +527,12 @@ def tela_questionario(request):
         pontos_sol = _inteiro(request.POST.get('reacao_sol'), 0, 0, 5)
         base_produto = request.POST.get('base_produto')
         objective = request.POST.get('objetivo')
+        sono_horas = request.POST.get('sono_horas')
+        exercicio_frequencia = request.POST.get('exercicio_frequencia')
+        protetor_solar = _inteiro(request.POST.get('protetor_solar'), None, 0, 2)  # None = nao respondeu
+        sensibilidade = _sim_nao(request.POST.get('sensibilidade'))
+        gestante = _sim_nao(request.POST.get('gestante'))
+        tipo_acne = request.POST.get('tipo_acne')
 
         # "Outro": guarda o texto que a pessoa digitou no lugar da palavra "outro"
         if objective == 'outro':
@@ -633,6 +606,18 @@ def tela_questionario(request):
             perfil.fototipo = pontos_sol + 1
             perfil.objetivo = objective or perfil.objetivo
             perfil.preferencia_produto = base_produto if base_produto in ('creme', 'gel') else perfil.preferencia_produto
+            # resposta fora das opcoes do model e ignorada (fica o valor que ja estava / o padrao)
+            if sono_horas in dict(PerfilDermatologico.SONO_CHOICES):
+                perfil.sono_horas = sono_horas
+            if exercicio_frequencia in dict(PerfilDermatologico.EXERCICIO_CHOICES):
+                perfil.exercicio_frequencia = exercicio_frequencia
+            if protetor_solar is not None:
+                perfil.protetor_solar = protetor_solar
+            if sensibilidade is not None:
+                perfil.sensibilidade = sensibilidade
+            if gestante is not None:
+                perfil.gestante = gestante
+            perfil.tipo_acne = _tipo_acne_valido(tipo_acne, perfil.tipo_acne, perfil.objetivo)
             perfil.porcentagem_saude = porcentagem_calculada
             # so troca a analise se houve scan novo
             if dados_ia_json:
@@ -646,6 +631,42 @@ def tela_questionario(request):
     return render(request, 'core/questionario.html')
 
 
+# Escala de Fitzpatrick do card "Fototipo" do dashboard: numero (1 a 6, o mesmo que
+# fica em perfil.fototipo) -> (algarismo romano, cor da pilula, texto sobre o sol).
+# Na ordem da escala, do tom mais claro ao mais escuro.
+FOTOTIPOS = {
+    1: ('I', '#f3d9c8', 'Sensibilidade muito alta ao sol. Use protetor solar todos os dias e evite o sol forte.'),
+    2: ('II', '#e7bb9a', 'Sensibilidade alta ao sol. Use protetor solar todos os dias, mesmo em dias nublados.'),
+    3: ('III', '#c98e63', 'Sensibilidade moderada ao sol. Use protetor solar todos os dias, mesmo em dias nublados.'),
+    4: ('IV', '#a86c44', 'Sensibilidade moderada a baixa ao sol. Use protetor solar todos os dias.'),
+    5: ('V', '#7a4b2e', 'Sensibilidade baixa ao sol, mas a proteção solar continua importante.'),
+    6: ('VI', '#4a2d1b', 'Sensibilidade baixa ao sol, mas a proteção solar continua importante.'),
+}
+
+
+# dados do card "Fototipo". Sem fototipo valido (campo pode estar vazio) devolve None
+def _fototipo_do_perfil(perfil):
+    if not perfil or perfil.fototipo not in FOTOTIPOS:
+        return None
+    romano, _, texto = FOTOTIPOS[perfil.fototipo]
+    return {
+        'romano': romano,
+        'texto': texto,
+        'tons': [
+            {'romano': r, 'cor': cor, 'atual': numero == perfil.fototipo}
+            for numero, (r, cor, _) in FOTOTIPOS.items()
+        ],
+    }
+
+
+# o JS do dashboard redesenha a lista ao trocar de aba e nao tem {% url %}:
+# por isso o link da tela de detalhe do produto ja vai pronto em cada passo
+def _com_link(passos):
+    for passo in passos:
+        passo['url'] = reverse('produto_detalhe', args=[passo['produto_id']]) if passo['produto_id'] else None
+    return passos
+
+
 def dashboard_view(request):
     # sem login nao mostra perfil (antes pegava o primeiro do banco, que e de outra pessoa)
     if request.user.is_authenticated:
@@ -653,66 +674,16 @@ def dashboard_view(request):
     else:
         perfil = None
 
-    rotina_manha = []
-    rotina_noite = []
-    if perfil:
-        rotina_manha = [
-            {
-                'class': 'completed',
-                'title': 'Limpeza Suave',
-                'description': f'Rotina de limpeza diária para pele {perfil.tipo_pele}',
-                'time': '08:00',
-                'action': None,
-                'icon': 'fa-check',
-            },
-            {
-                'class': 'action-required' if perfil.porcentagem_saude < 80 else 'completed',
-                'title': 'Hidratação & Tratamento',
-                'description': f'Sérum recomendado para objetivo "{perfil.objetivo}"',
-                'time': None if perfil.porcentagem_saude < 80 else '19:00',
-                'action': 'Fazer agora' if perfil.porcentagem_saude < 80 else None,
-                'icon': 'fa-check' if perfil.porcentagem_saude >= 80 else None,
-            },
-            {
-                'class': 'pending' if perfil.fototipo and perfil.fototipo < 5 else 'completed',
-                'title': 'Proteção Solar',
-                'description': f'FPS 50+ para fototipo {perfil.fototipo or "1"}',
-                'time': '12:00' if perfil.fototipo and perfil.fototipo < 5 else 'Já feito',
-                'action': None,
-                'icon': 'fa-check' if perfil.fototipo and perfil.fototipo >= 5 else None,
-            },
-        ]
-        rotina_noite = [
-            {
-                'class': 'completed',
-                'title': 'Remoção de Maquiagem',
-                'description': 'Demaquilante suave antes de dormir',
-                'time': '21:00',
-                'action': None,
-                'icon': 'fa-check',
-            },
-            {
-                'class': 'completed',
-                'title': 'Tratamento Noturno',
-                'description': f'Sérum calmante para {perfil.tipo_pele}',
-                'time': '21:30',
-                'action': None,
-                'icon': 'fa-check',
-            },
-            {
-                'class': 'pending',
-                'title': 'Hidratação Profunda',
-                'description': 'Creme nutritivo para reparar enquanto dorme',
-                'time': '22:00',
-                'action': 'Aplicar agora',
-                'icon': None,
-            },
-        ]
+    # rotina real (produtos do catalogo) montada em recomendacao.py; sem perfil vem vazia
+    rotina = montar_rotina(perfil)
 
     context = {
         'perfil': perfil,
-        'rotina_manha': rotina_manha,
-        'rotina_noite': rotina_noite,
+        'rotina_manha': _com_link(rotina['manha']),
+        'rotina_noite': _com_link(rotina['noite']),
+        'avisos': rotina['avisos'],
+        'fototipo': _fototipo_do_perfil(perfil),
+        'objetivo_rotulo': rotulo_objetivo(perfil.objetivo) if perfil else '',
     }
     return render(request, 'core/dashboard.html', context)
 
@@ -902,15 +873,6 @@ def tela_scanner(request):
 # na URL (?aba=pele) e cada aba tem o seu proprio formulario/POST
 ABAS_PERFIL = ('resumo', 'dados', 'pele', 'seguranca', 'privacidade')
 
-# objetivos oferecidos no select da aba "Perfil de pele" (mesmos do questionario).
-# se o objetivo salvo for outro texto (opcao "Outro"), ele entra na lista tambem
-OBJETIVOS_PERFIL = [
-    'Controlar oleosidade',
-    'Reduzir manchas',
-    'Hidratar a pele',
-    'Prevenir sinais de idade',
-]
-
 # ordem e titulo dos indicadores no "Resumo da pele" (iguais aos do scanner)
 INDICADORES_RESUMO = [
     ('oleosidade', 'Oleosidade'),
@@ -987,9 +949,12 @@ def _alergias_do_perfil(perfil):
 def _contexto_perfil(request, perfil, aba, form_senha=None):
     # tudo que o core/perfil.html precisa, incluindo o formulario de senha
     # (volta preenchido, com os erros, quando a troca de senha falha)
-    objetivos = list(OBJETIVOS_PERFIL)
-    if perfil and perfil.objetivo and perfil.objetivo not in objetivos:
-        objetivos.append(perfil.objetivo)
+    # o select usa os mesmos objetivos do questionario (recomendacao.OBJETIVOS), como
+    # pares (valor, texto). se o objetivo salvo for texto livre (opcao "Outro"), entra na lista tambem
+    objetivos = list(OBJETIVOS.items())
+    objetivo_atual = normalizar_objetivo(perfil.objetivo) if perfil else ''
+    if objetivo_atual and objetivo_atual not in OBJETIVOS:
+        objetivos.append((objetivo_atual, objetivo_atual))
 
     return {
         'perfil': perfil,
@@ -998,6 +963,8 @@ def _contexto_perfil(request, perfil, aba, form_senha=None):
         'indicadores': _indicadores_do_perfil(perfil),
         'alergias_lista': _alergias_do_perfil(perfil) if perfil else [],
         'objetivos': objetivos,
+        'objetivo_atual': objetivo_atual,
+        'objetivo_rotulo': rotulo_objetivo(perfil.objetivo) if perfil else '',
         'form_senha': form_senha or PasswordChangeForm(request.user),
     }
 
@@ -1053,9 +1020,12 @@ def editar_perfil(request):
 
     tipo_pele = request.POST.get('tipo_pele')
     alergias = request.POST.get('alergias', '').strip()
-    objetivo = request.POST.get('objetivo', '').strip()
+    objetivo = normalizar_objetivo(request.POST.get('objetivo'))  # grava o mesmo codigo do questionario
     preferencia_produto = request.POST.get('preferencia_produto')
     usa_maquiagem_diariamente = request.POST.get('usa_maquiagem_diariamente')
+    sensibilidade = _sim_nao(request.POST.get('sensibilidade'))
+    gestante = _sim_nao(request.POST.get('gestante'))
+    tipo_acne = request.POST.get('tipo_acne')
 
     if tipo_pele in dict(PerfilDermatologico.TIPO_PELE_CHOICES):
         perfil.tipo_pele = tipo_pele
@@ -1066,6 +1036,11 @@ def editar_perfil(request):
         perfil.preferencia_produto = preferencia_produto
     if usa_maquiagem_diariamente in ('sim', 'nao'):
         perfil.usa_maquiagem_diariamente = usa_maquiagem_diariamente
+    if sensibilidade is not None:
+        perfil.sensibilidade = sensibilidade
+    if gestante is not None:
+        perfil.gestante = gestante
+    perfil.tipo_acne = _tipo_acne_valido(tipo_acne, perfil.tipo_acne, perfil.objetivo)
 
     perfil.save()
     messages.success(request, 'Perfil de pele atualizado. As recomendações já usam as novas respostas.')
@@ -1199,7 +1174,7 @@ def tela_produtos(request):
 
     context = {
         "perfil": perfil,
-        "objetivo_usuario": perfil.objetivo if perfil else "não definido",
+        "objetivo_usuario": rotulo_objetivo(perfil.objetivo) if perfil else "não definido",
         "produtos": produtos,
         "filtro_ativo": filtro,
     }

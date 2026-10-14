@@ -14,7 +14,7 @@
             </div>
             <div class="health-info">
                 <h3>Saúde da Pele <span class="perfil">{{ perfil.tipo_pele|capfirst }}</span></h3>
-                <p>Idade: {{ perfil.idade }} anos | Objetivo: {{ perfil.objetivo|default:'Melhorar a pele' }}.</p>
+                <p>Idade: {{ perfil.idade }} anos | Objetivo: {{ objetivo_rotulo|default:'Melhorar a pele' }}.</p>
                 <div class="detalhes">
                     <div>
                         <span class="preferencias">Preferência</span>
@@ -29,17 +29,22 @@
         </div>
 
         <div class="card perfil">
-            <h2>Perfil Dermatológico</h2>
-            <h3 class="fototipo">{{ perfil.fototipo }} <small>FOTOTIPO</small></h3>
-            <p>
-                {% if perfil.fototipo <= 2 %}
-                    Pele mais sensível ao sol — reforce o protetor solar ao longo do dia.
-                {% elif perfil.fototipo <= 4 %}
-                    Pele moderadamente sensível ao sol — use protetor solar regularmente.
-                {% else %}
-                    Pele mais resistente ao sol, mas não se esqueça do protetor solar.
-                {% endif %}
-            </p>
+            <h2>Fototipo</h2>
+            {% if fototipo %}
+            <div class="fototipo-linha">
+                <span class="fototipo-numero">{{ fototipo.romano }}</span>
+                <small>escala Fitzpatrick</small>
+            </div>
+            <!-- barra de 6 tons: o da pessoa tem contorno roxo (o aria-label diz o mesmo para quem nao enxerga cores) -->
+            <ul class="fototipo-escala" role="img" aria-label="Fototipo {{ fototipo.romano }} de VI na escala Fitzpatrick">
+                {% for tom in fototipo.tons %}
+                <li{% if tom.atual %} class="atual"{% endif %} style="background-color: {{ tom.cor }}"></li>
+                {% endfor %}
+            </ul>
+            <p>{{ fototipo.texto }}</p>
+            {% else %}
+            <p>Fototipo não informado. Refaça o questionário para ver essa informação.</p>
+            {% endif %}
         </div>
     </div>
 
@@ -63,7 +68,7 @@
                 </div>
                 <div class="rotina-details">
                     <strong>{{ item.title }}</strong>
-                    <span>{{ item.description }}</span>
+                    <span>{% if item.url %}<a href="{{ item.url }}">{{ item.description }}</a>{% else %}{{ item.description }}{% endif %}</span>
                 </div>
                 {% if item.action %}
                 <div class="rotina-action">{{ item.action }}</div>
@@ -73,6 +78,13 @@
             </li>
             {% endfor %}
         </ul>
+
+        <div class="rotina-avisos">
+            {% for aviso in avisos %}
+            <p class="rotina-aviso{% if aviso.destaque %} destaque{% endif %}" role="note">{{ aviso.texto }}</p>
+            {% endfor %}
+            <p class="rotina-aviso fixo" role="note">Esta rotina não substitui a avaliação de um dermatologista.</p>
+        </div>
 
         {{ rotina_manha|json_script:"rotina-manha-data" }}
         {{ rotina_noite|json_script:"rotina-noite-data" }}
@@ -102,7 +114,15 @@
                 const titulo = document.createElement('strong');
                 titulo.textContent = item.title;
                 const descricao = document.createElement('span');
-                descricao.textContent = item.description;
+                if (item.url) {
+                    /* produto do catalogo: o texto vira link para a tela de detalhe */
+                    const link = document.createElement('a');
+                    link.href = item.url;
+                    link.textContent = item.description;
+                    descricao.appendChild(link);
+                } else {
+                    descricao.textContent = item.description;
+                }
                 detalhes.append(titulo, descricao);
 
                 const extra = document.createElement('div');

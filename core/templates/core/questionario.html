@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Questionário | LUME Skin</title>
-    <link rel="stylesheet" href="{% static 'core/style.css' %}?v=6">
+    <link rel="stylesheet" href="{% static 'core/style.css' %}?v=7">
 </head>
 <body class="app-body">
     <main class="main content">
@@ -72,6 +72,18 @@
                     <!-- aparece so com "Outro" (js) -->
                     <input type="text" name="objetivo_outro" id="objetivo_outro" placeholder="Especifique..."
                            aria-label="Especifique seu objetivo" hidden>
+                    <!-- aparece so com "Reduzir Acne" (js). "Não sei" tem valor "nao-sei" para a barra de
+                         progresso contar como respondido; a view trata qualquer valor desconhecido como "não sei" -->
+                    <div id="bloco-tipo-acne" hidden>
+                        <label for="tipo_acne" class="pergunta pergunta-sub">3.1. Qual tipo de acne você tem?</label>
+                        <select name="tipo_acne" id="tipo_acne">
+                            <option value="nao-sei">Não sei</option>
+                            <option value="Comedonal">Comedonal: cravos brancos e pretos</option>
+                            <option value="Inflamatória">Inflamatória: espinhas vermelhas, com pus</option>
+                            <option value="Nodular">Nodular: caroços duros e doloridos sob a pele</option>
+                            <option value="Cística">Cística: bolsas grandes, profundas e dolorosas</option>
+                        </select>
+                    </div>
                 </div>
 
                 <!-- linha 4 -->
@@ -86,6 +98,26 @@
                     <!-- aparece so com "Sim" (js) -->
                     <input type="text" name="descricaoalergia" id="descricaoalergia" placeholder="Descreva as alergias..."
                            aria-label="Descreva suas alergias" hidden>
+                </div>
+
+                <div class="form-bloco bloco-meio" data-pergunta>
+                    <fieldset>
+                        <legend class="pergunta pergunta-sub">4.1. Sua pele é sensível? (arde, fica vermelha ou coça com facilidade ao usar produtos)</legend>
+                        <div class="radio-group">
+                            <label><input type="radio" name="sensibilidade" value="0" required> Não</label>
+                            <label><input type="radio" name="sensibilidade" value="1" required> Sim</label>
+                        </div>
+                    </fieldset>
+                </div>
+
+                <div class="form-bloco bloco-meio" data-pergunta>
+                    <fieldset>
+                        <legend class="pergunta pergunta-sub">4.2. Você está grávida? (alguns ativos não são indicados na gravidez)</legend>
+                        <div class="radio-group">
+                            <label><input type="radio" name="gestante" value="0" required> Não</label>
+                            <label><input type="radio" name="gestante" value="1" required> Sim</label>
+                        </div>
+                    </fieldset>
                 </div>
 
                 <div class="form-bloco bloco-meio" data-pergunta>
@@ -211,6 +243,8 @@
         const selectObjetivo = form.querySelector('[name="objetivo"]');
         const objetivoOutro = form.querySelector('[name="objetivo_outro"]');
         const descricaoAlergia = form.querySelector('[name="descricaoalergia"]');
+        const blocoTipoAcne = document.getElementById('bloco-tipo-acne');
+        const selectTipoAcne = document.getElementById('tipo_acne');
         const blocoUpload = document.getElementById('bloco-upload-foto');
         const inputFoto = document.getElementById('input-foto');
         const consentimentoFoto = document.getElementById('consentimento-foto');
@@ -301,6 +335,11 @@
         function atualizarCamposCondicionais() {
             /* pergunta 3: "Outro" */
             alternarTexto(objetivoOutro, selectObjetivo.value === 'outro');
+
+            /* pergunta 3.1: so para "Reduzir Acne" (fora disso volta para "Não sei") */
+            const eAcne = selectObjetivo.value === 'reduzir acne';
+            blocoTipoAcne.hidden = !eAcne;
+            if (!eAcne) { selectTipoAcne.value = 'nao-sei'; }
 
             /* pergunta 4: "Sim" */
             const alergia = form.querySelector('[name="alergias"]:checked');
