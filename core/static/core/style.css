@@ -952,13 +952,14 @@ body.body:has(.sidebar) {
 .card.perfil {
     display: flex;
     flex-direction: column;
+    padding: 24px 32px; /* menos espaco em cima/embaixo: o card cabe na altura do card Saude da Pele */
 }
 
 .card.perfil h2 {
     font-size: 18px;
     font-weight: 700;
     color: #0b132a;
-    margin-bottom: 16px;
+    margin-bottom: 10px;
 }
 
 /* Fototipo: algarismo romano grande + "escala Fitzpatrick" ao lado */
@@ -966,11 +967,11 @@ body.body:has(.sidebar) {
     display: flex;
     align-items: baseline;
     gap: 10px;
-    margin-bottom: 16px;
+    margin-bottom: 8px;
 }
 
 .fototipo-numero {
-    font-size: 56px;
+    font-size: 32px;
     font-weight: 800;
     color: #7c4dbd;
     line-height: 1;
@@ -978,7 +979,7 @@ body.body:has(.sidebar) {
 }
 
 .fototipo-linha small {
-    font-size: 15px;
+    font-size: 14px;
     color: #5a6478;
     font-weight: 700;
 }
@@ -987,7 +988,7 @@ body.body:has(.sidebar) {
 .fototipo-escala {
     display: flex;
     gap: 8px;
-    margin: 0 0 20px;
+    margin: 0 0 10px;
     padding: 4px;
     list-style: none;
 }
@@ -1004,10 +1005,21 @@ body.body:has(.sidebar) {
 }
 
 .card.perfil p {
-    font-size: 14px;
-    line-height: 1.6;
+    font-size: 13px;
+    line-height: 1.5;
     color: #5a6478;
     margin-bottom: 0;
+}
+
+/* Telas medias: a coluna do Fototipo fica estreita e o texto ocupa mais linhas, entao o card fica mais compacto */
+@media (max-width: 1200px) {
+    .card.perfil {
+        padding: 18px 22px;
+    }
+
+    .fototipo-numero {
+        font-size: 28px;
+    }
 }
 
 /* ==========================================================================
