@@ -48,6 +48,20 @@ def criar_usuario_com_perfil(email='ana@email.com', com_perfil=True):
     return usuario, perfil
 
 
+class PaginasLegaisTests(TestCase):
+    def test_pagina_de_termos_de_uso(self):
+        resposta = self.client.get(reverse('termosdeuso'))
+        self.assertEqual(resposta.status_code, 200)
+        self.assertTemplateUsed(resposta, 'core/termosdeuso.html')
+        self.assertContains(resposta, 'TERMOS DE USO')
+
+    def test_pagina_de_politica_de_privacidade(self):
+        resposta = self.client.get(reverse('politica_privacidade'))
+        self.assertEqual(resposta.status_code, 200)
+        self.assertTemplateUsed(resposta, 'core/politica_privacidade.html')
+        self.assertContains(resposta, 'POLÍTICA DE PRIVACIDADE')
+
+
 class PerfilBaseTestCase(TestCase):
     def setUp(self):
         self.usuario, self.perfil = criar_usuario_com_perfil()
