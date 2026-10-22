@@ -132,12 +132,26 @@
         android:textSize="22sp"
         android:textStyle="bold" />
 
-    <!-- Extra: reiniciar partida -->
+    <!-- Salva a partida no banco e zera o placar -->
+    <Button
+        android:id="@+id/botaoFinalizar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="Finalizar partida" />
+
+    <!-- Abre a tela de histórico -->
+    <Button
+        android:id="@+id/botaoHistorico"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Ver histórico" />
+
+    <!-- Extra: reiniciar partida (zera sem salvar) -->
     <Button
         android:id="@+id/botaoReiniciar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
         android:text="Reiniciar partida" />
 
 </LinearLayout>

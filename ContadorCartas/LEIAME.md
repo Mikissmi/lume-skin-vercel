@@ -1,6 +1,29 @@
 # Contador de Jogos de Carta (Android – Java)
 
-Só são necessários 2 arquivos: `activity_main.xml` (a tela) e `MainActivity.java` (a lógica).
+Arquivos:
+
+| Arquivo | Onde colocar no Android Studio |
+|---|---|
+| `activity_main.xml` | `res/layout/` (substitui o existente) |
+| `activity_historico.xml` | `res/layout/` (arquivo novo) |
+| `MainActivity.java` | pasta do package (substitui o existente) |
+| `HistoricoActivity.java` | pasta do package (arquivo novo) |
+| `BancoHelper.java` | pasta do package (arquivo novo) |
+
+**Importante:** registre a nova tela no `AndroidManifest.xml`, dentro de `<application>`
+(logo abaixo da `MainActivity`):
+
+```xml
+<activity android:name=".HistoricoActivity" />
+```
+
+## Histórico com SQLite
+
+- `BancoHelper` cria o banco `partidas.db` com a tabela `partidas`
+  (id, data, jogador1, jogador2, pontos1, pontos2, vencedor).
+- "Finalizar partida" salva o resultado no banco, mostra um `Toast` e zera o placar.
+- "Ver histórico" abre a `HistoricoActivity`, que lista as partidas num `ListView`.
+- Como os dados ficam no banco, o histórico continua aparecendo depois de fechar e abrir o app.
 
 ## Como usar no Android Studio
 

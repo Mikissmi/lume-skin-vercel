@@ -1,5 +1,6 @@
 package com.example.contadorcartas;
 
+import android.content.Intent;
 import android.os.Bundle;
 import android.view.View;
 import android.widget.Button;
@@ -9,12 +10,20 @@ import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
+
 public class MainActivity extends AppCompatActivity {
 
     // Componentes da tela
     EditText editNome1, editNome2, editMaximo;
     TextView textPontos1, textPontos2, textMensagem;
     Button botaoMais1, botaoMenos1, botaoMais2, botaoMenos2, botaoReiniciar;
+    Button botaoFinalizar, botaoHistorico;
+
+    // Banco de dados (SQLite)
+    BancoHelper banco;
 
     // Pontuação de cada jogador
     int pontos1 = 0;
@@ -37,6 +46,10 @@ public class MainActivity extends AppCompatActivity {
         botaoMais2 = findViewById(R.id.botaoMais2);
         botaoMenos2 = findViewById(R.id.botaoMenos2);
         botaoReiniciar = findViewById(R.id.botaoReiniciar);
+        botaoFinalizar = findViewById(R.id.botaoFinalizar);
+        botaoHistorico = findViewById(R.id.botaoHistorico);
+
+        banco = new BancoHelper(this);
 
         // O que cada botão faz quando é clicado
         botaoMais1.setOnClickListener(new View.OnClickListener() {
@@ -73,6 +86,52 @@ public class MainActivity extends AppCompatActivity {
                 reiniciar();
             }
         });
+
+        botaoFinalizar.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                finalizarPartida();
+            }
+        });
+
+        // Abre a tela de histórico
+        botaoHistorico.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                Intent intent = new Intent(MainActivity.this, HistoricoActivity.class);
+                startActivity(intent);
+            }
+        });
+    }
+
+    // Salva a partida no banco, mostra um Toast e zera o placar
+    void finalizarPartida() {
+        String nome1 = editNome1.getText().toString();
+        String nome2 = editNome2.getText().toString();
+        if (nome1.isEmpty()) {
+            nome1 = "Jogador 1";
+        }
+        if (nome2.isEmpty()) {
+            nome2 = "Jogador 2";
+        }
+
+        // Descobre quem venceu
+        String vencedor;
+        if (pontos1 > pontos2) {
+            vencedor = nome1;
+        } else if (pontos2 > pontos1) {
+            vencedor = nome2;
+        } else {
+            vencedor = "Empate";
+        }
+
+        // Data e hora de agora
+        String data = new SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(new Date());
+
+        banco.salvarPartida(data, nome1, nome2, pontos1, pontos2, vencedor);
+        Toast.makeText(this, "Partida salva no histórico!", Toast.LENGTH_SHORT).show();
+
+        reiniciar();
     }
 
     // Aumenta 1 ponto do jogador (1 ou 2)
