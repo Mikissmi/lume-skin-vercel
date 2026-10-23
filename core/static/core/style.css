@@ -832,6 +832,7 @@ body.body:has(.sidebar) {
     grid-template-columns: 2fr 1fr;
     gap: 24px;
     align-items: stretch; /* os dois cards de cima (Saude da Pele e Fototipo) sempre com a mesma altura */
+    
 }
 
 /* Estilo Base de todos os Cards */
@@ -1322,6 +1323,7 @@ body.body:has(.sidebar) {
 
 /* Nota fixa FORA do card: pequena e mais transparente */
 .rotina-nota {
+    grid-column: 1 / -1;
     margin: 14px 8px 0;
     font-size: 11px;
     line-height: 1.5;
@@ -3311,4 +3313,261 @@ body.body:has(.sidebar) {
     .perfil-tab {
         white-space: nowrap;
     }
+}
+
+/* Estilo das páginas (Termos de Uso e Política de Privacidade)*/
+.pagina {
+    --lume-roxo: #a46fd2;
+    --lume-azul: #0d7cb3;
+    --lume-texto: #2b2433;
+    --lume-suave: #6b6475;
+    --lume-fundo: #f7f2fc;
+    max-width: 820px;
+    margin: 0 auto;
+    padding: 0 16px 48px;
+    color: var(--lume-texto);
+    line-height: 1.7;
+    font-size: 1rem;
+}
+
+.pagina p { margin: 0 0 14px; }
+
+.pagina a {
+    color: var(--lume-azul);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+.pagina a:hover { color: var(--lume-roxo); }
+
+/* Sumário */
+.sumario {
+    background: var(--lume-fundo);
+    border: 1px solid rgba(164, 111, 210, 0.25);
+    border-radius: 16px;
+    padding: 18px 20px;
+    margin: 0 0 28px;
+}
+.sumario strong {
+    display: block;
+    margin-bottom: 10px;
+    font-size: 0.8rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--lume-roxo);
+}
+.sumario ol {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 6px 18px;
+    counter-reset: sumario;
+}
+.sumario li { counter-increment: sumario; }
+.sumario a {
+    display: block;
+    padding: 5px 8px;
+    border-radius: 8px;
+    font-size: 0.92rem;
+    text-decoration: none;
+    color: var(--lume-texto);
+    transition: background 0.2s, color 0.2s;
+}
+.sumario a::before {
+    content: counter(sumario) ".";
+    display: inline-block;
+    min-width: 1.6em;
+    font-weight: 700;
+    color: var(--lume-roxo);
+}
+.sumario a:hover {
+    background: #fff;
+    color: var(--lume-azul);
+}
+
+/* Títulos de seção */
+.pagina h3 {
+    position: relative;
+    margin: 36px 0 14px;
+    padding: 2px 0 2px 16px;
+    font-size: 1.2rem;
+    line-height: 1.35;
+    color: var(--lume-texto);
+    scroll-margin-top: 90px;
+}
+
+/* Listas */
+.pagina ul,
+.pagina ol { margin: 0 0 16px; padding-left: 22px; }
+.pagina li { margin-bottom: 8px; }
+.pagina ul li::marker { color: var(--lume-roxo); }
+.pagina ol li::marker { color: var(--lume-roxo); font-weight: 700; }
+.pagina li > ul { margin-top: 8px; margin-bottom: 4px; }
+.pagina li > ul li::marker { color: var(--lume-azul); }
+
+/* Destaques */
+.aviso,
+.resumo {
+    border-radius: 16px;
+    padding: 4px 22px 14px;
+    margin: 28px 0 8px;
+}
+.aviso {
+    background: #fff7ed;
+    border: 1px solid #f6c8a0;
+}
+.aviso h3::before { background: #e9812c; }
+.aviso ul li::marker { color: #e9812c; }
+.resumo {
+    background: linear-gradient(135deg, rgba(164, 111, 210, 0.12), rgba(13, 124, 179, 0.1));
+    border: 1px solid rgba(164, 111, 210, 0.3);
+}
+
+/* Rodapé da página */
+.topo {
+    display: inline-block;
+    margin-top: 28px;
+    padding: 8px 18px;
+    border-radius: 999px;
+    background: linear-gradient(135deg, var(--lume-roxo), var(--lume-azul));
+    color: #fff !important;
+    text-decoration: none !important;
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+.topo:hover { opacity: 0.9; color: #fff !important; }
+
+@media (max-width: 600px) {
+    .pagina-legal { font-size: 0.97rem; }
+    .pagina-legal h3 { font-size: 1.1rem; }
+    .aviso-legal, .resumo-legal { padding: 2px 16px 10px; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    html { scroll-behavior: smooth; }
+}
+
+
+/* ==========================================================================
+   20. CARD DO ÍNDICE UV (ao lado da rotina no dashboard)
+   ========================================================================== */
+
+.card-uv {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.card-uv h3 {
+    font-size: 18px;
+    font-weight: 700;
+    color: #0b132a;
+    margin-bottom: 8px;
+}
+
+.uv-valor {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.uv-valor strong {
+    font-size: 48px;
+    font-weight: 800;
+    line-height: 1;
+    color: #0b132a;
+}
+
+/* Badge do nível (mesmo visual dos badges do scanner) */
+.uv-badge {
+    font-size: 12px;
+    font-weight: 700;
+    padding: 4px 12px;
+    border-radius: 20px;
+    background: #edf2f7;
+    color: #718096;
+    text-transform: capitalize;
+}
+
+.uv-badge.uv-baixo      { background: #e6f9f0; color: #10b981; }
+.uv-badge.uv-moderado   { background: #fef7dc; color: #b7791f; }
+.uv-badge.uv-alto       { background: #ffecd9; color: #dd6b20; }
+.uv-badge.uv-muito-alto { background: #fdecef; color: #e35d6a; }
+.uv-badge.uv-extremo    { background: #f3ebfc; color: #a46fd2; }
+
+/* Barra do índice: verde (baixo) -> amarelo -> laranja -> vermelho -> roxo (extremo) */
+.uv-barra {
+    position: relative;
+    height: 10px;
+    border-radius: 20px;
+    margin: 22px 0 8px;
+    background: linear-gradient(
+        90deg,
+        #10b981 0%,
+        #84cc16 25%,
+        #facc15 42%,
+        #fb923c 62%,
+        #ef4444 82%,
+        #a46fd2 100%
+    );
+}
+
+.uv-marcador {
+    position: absolute;
+    top: 50%;
+    left: 0;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #ffffff;
+    border: 3px solid #0b132a;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    transform: translate(-50%, -50%);
+    transition: left 0.6s ease;
+}
+
+.uv-marcador[hidden] {
+    display: none;
+}
+
+.uv-escala {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    font-weight: 600;
+    color: #a0aec0;
+}
+
+.uv-descricao {
+    margin-top: 14px;
+    font-size: 13px;
+    color: #718096;
+    line-height: 1.5;
+}
+
+.uv-local {
+    font-size: 12px;
+    font-weight: 600;
+    color: #a0aec0;
+}
+
+.uv-credito {
+    margin-top: 10px;
+    font-size: 11px;
+    color: #a0aec0;
+}
+
+.uv-credito a {
+    color: #a46fd2;
+    text-decoration: none;
+}
+
+/* Rotina + UV lado a lado: evita que o conteúdo estoure a coluna */
+.dashboard-rotina.dashboard-secao > * {
+    min-width: 0;
+}
+
+.dashboard-rotina.dashboard-secao {
+    align-items: stretch;
 }

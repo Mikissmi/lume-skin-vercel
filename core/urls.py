@@ -41,6 +41,9 @@ urlpatterns = [
     path('perfil/foto/apagar/', views.apagar_foto_perfil, name='apagar_foto_perfil'),
     path('perfil/exportar/', views.exportar_dados, name='exportar_dados'),
     path('perfil/excluir/', views.excluir_conta, name='excluir_conta'),
+    
+    path('termosdeuso/', views.tela_termos_de_uso, name='termosdeuso'),
+    path('politica-privacidade/', views.tela_politica_privacidade, name='politica_privacidade'),
 
     # Rota para a página dos especialistas
     path('especialistas/', views.tela_especialistas, name='especialistas'),
@@ -67,4 +70,6 @@ urlpatterns = [
     path('administradores/especialistas/<int:especialista_id>/editar/', views.especialista_form, name='especialista_editar'),
     path('administradores/especialistas/<int:especialista_id>/excluir/', views.especialista_excluir, name='especialista_excluir'),
 
+    #  Rota para a página da openmeteo
+    path("api/uv/", views.indice_uv, name="indice_uv"),
 ]

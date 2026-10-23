@@ -280,6 +280,22 @@
 
             <div class="perfil-item">
                 <div>
+                    <span class="perfil-item-label">Política de Privacidade</span>
+                    <p>Saiba como o LUME Skin coleta, usa e protege os seus dados pessoais.</p>
+                </div>
+                <a href="{% url 'politica_privacidade' %}" class="btn-perfil-secundario">Ver política de privacidade</a>
+            </div> 
+
+            <div class="perfil-item">
+                <div>
+                    <span class="perfil-item-label">Termos de Uso</span>
+                    <p>Leia os Termos de Uso do LUME Skin, que regem o seu acesso e uso do aplicativo.</p>
+                </div>
+                <a href="{% url 'termosdeuso' %}" class="btn-perfil-secundario">Ver termos de uso</a>
+            </div>
+
+            <div class="perfil-item">
+                <div>
                     <span class="perfil-item-label">Imagem do último scan</span>
                     {% if perfil and perfil.foto_rosto %}
                     <img src="{{ perfil.foto_rosto }}" alt="Imagem do último scan guardada na sua conta" class="privacidade-miniatura">
